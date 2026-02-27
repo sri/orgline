@@ -1,46 +1,50 @@
 package server
 
 import (
-	"io"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 )
 
-func TestHelloWorldHandler(t *testing.T) {
-	srv := New(Config{Addr: ":0"})
+func TestHelloAPIHandler(t *testing.T) {
+	srv, err := New(Config{Addr: ":0"})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/hello", nil)
 	rec := httptest.NewRecorder()
-
 	srv.Handler.ServeHTTP(rec, req)
 
-	resp := rec.Result()
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read body: %v", err)
+	if got, want := rec.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	var response struct {
+		Message string `json:"message"`
 	}
 
-	if got, want := string(body), "Hello World"; got != want {
-		t.Fatalf("body = %q, want %q", got, want)
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if got, want := response.Message, "Hello World"; got != want {
+		t.Fatalf("message = %q, want %q", got, want)
 	}
 }
 
-func TestHelloWorldHandlerNotFound(t *testing.T) {
-	srv := New(Config{Addr: ":0"})
+func TestEmbeddedFrontendMissingBuild(t *testing.T) {
+	srv, err := New(Config{Addr: ":0"})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
 
-	req := httptest.NewRequest(http.MethodGet, "/missing", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
-
 	srv.Handler.ServeHTTP(rec, req)
 
-	if rec.Result().StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", rec.Result().StatusCode, http.StatusNotFound)
+	if got, want := rec.Code, http.StatusServiceUnavailable; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
 	}
 }
