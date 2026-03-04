@@ -13,11 +13,28 @@ import (
 )
 
 type Config struct {
-	Addr           string
-	FrontendDevURL string
+	Addr              string
+	FrontendDevURL    string
+	ReadHeaderTimeout time.Duration
+	ReadTimeout       time.Duration
+	WriteTimeout      time.Duration
+	IdleTimeout       time.Duration
 }
 
 func New(cfg Config) (*http.Server, error) {
+	if cfg.ReadHeaderTimeout <= 0 {
+		cfg.ReadHeaderTimeout = 5 * time.Second
+	}
+	if cfg.ReadTimeout <= 0 {
+		cfg.ReadTimeout = 15 * time.Second
+	}
+	if cfg.WriteTimeout <= 0 {
+		cfg.WriteTimeout = 15 * time.Second
+	}
+	if cfg.IdleTimeout <= 0 {
+		cfg.IdleTimeout = 60 * time.Second
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/hello", helloAPIHandler)
 
@@ -31,7 +48,10 @@ func New(cfg Config) (*http.Server, error) {
 	return &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           mux,
-		ReadHeaderTimeout: 5 * time.Second,
+		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+		ReadTimeout:       cfg.ReadTimeout,
+		WriteTimeout:      cfg.WriteTimeout,
+		IdleTimeout:       cfg.IdleTimeout,
 	}, nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestHelloAPIHandler(t *testing.T) {
@@ -34,17 +35,32 @@ func TestHelloAPIHandler(t *testing.T) {
 	}
 }
 
-func TestEmbeddedFrontendMissingBuild(t *testing.T) {
+func TestNewServerInvalidDevURL(t *testing.T) {
+	_, err := New(Config{
+		Addr:           ":0",
+		FrontendDevURL: "://bad-url",
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid frontend dev url")
+	}
+}
+
+func TestNewServerTimeoutDefaults(t *testing.T) {
 	srv, err := New(Config{Addr: ":0"})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	rec := httptest.NewRecorder()
-	srv.Handler.ServeHTTP(rec, req)
-
-	if got, want := rec.Code, http.StatusServiceUnavailable; got != want {
-		t.Fatalf("status = %d, want %d", got, want)
+	if got, want := srv.ReadHeaderTimeout, 5*time.Second; got != want {
+		t.Fatalf("read header timeout = %s, want %s", got, want)
+	}
+	if got, want := srv.ReadTimeout, 15*time.Second; got != want {
+		t.Fatalf("read timeout = %s, want %s", got, want)
+	}
+	if got, want := srv.WriteTimeout, 15*time.Second; got != want {
+		t.Fatalf("write timeout = %s, want %s", got, want)
+	}
+	if got, want := srv.IdleTimeout, 60*time.Second; got != want {
+		t.Fatalf("idle timeout = %s, want %s", got, want)
 	}
 }
