@@ -486,13 +486,7 @@
         const rootEl = document.getElementById("outline-root");
         const themeSelect = document.getElementById("theme-select");
         const themeStorageKey = "orgline-theme";
-        const toolNames = [
-          "Zoom",
-          "Annotate",
-          "Link",
-          "Summarize",
-          "Archive"
-        ];
+        const zoomQueryParam = "item_id";
         const themes = [
           { id: "default", label: "Default" },
           { id: "dark", label: "Dark" },
@@ -615,6 +609,45 @@
               trigger.setAttribute("aria-expanded", "false");
             }
           }
+        }
+
+        function zoomItemIDFromURL() {
+          const params = new URLSearchParams(window.location.search);
+          return (params.get(zoomQueryParam) || "").trim();
+        }
+
+        function writeZoomItemIDToURL(itemID, replaceHistory = false) {
+          const url = new URL(window.location.href);
+          if (itemID === "") {
+            url.searchParams.delete(zoomQueryParam);
+          } else {
+            url.searchParams.set(zoomQueryParam, itemID);
+          }
+
+          if (replaceHistory) {
+            window.history.replaceState({}, "", url.toString());
+            return;
+          }
+          window.history.pushState({}, "", url.toString());
+        }
+
+        function zoomToItem(itemID) {
+          const current = zoomItemIDFromURL();
+          writeZoomItemIDToURL(itemID, current === itemID);
+        }
+
+        function findItemByUUID(items, uuid) {
+          for (const item of items) {
+            if (item.uuid === uuid) {
+              return item;
+            }
+            const foundInChildren = findItemByUUID(item.children, uuid);
+            if (foundInChildren) {
+              return foundInChildren;
+            }
+          }
+
+          return null;
         }
 
         function visibleItemUUIDs() {
@@ -985,20 +1018,19 @@
             toolMenu.className = "item-tool-menu";
             toolMenu.hidden = true;
 
-            for (const toolName of toolNames) {
-              const option = document.createElement("button");
-              option.type = "button";
-              option.className = "item-tool-option";
-              option.textContent = toolName;
-              option.setAttribute("role", "menuitem");
-              option.addEventListener("click", (event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                closeAllToolMenus();
-                showError(`${toolName} tool is not implemented yet.`);
-              });
-              toolMenu.appendChild(option);
-            }
+            const zoomOption = document.createElement("button");
+            zoomOption.type = "button";
+            zoomOption.className = "item-tool-option";
+            zoomOption.textContent = "Zoom";
+            zoomOption.setAttribute("role", "menuitem");
+            zoomOption.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              closeAllToolMenus();
+              zoomToItem(item.uuid);
+              void loadOutline(item.uuid);
+            });
+            toolMenu.appendChild(zoomOption);
 
             toolTrigger.addEventListener("click", (event) => {
               event.preventDefault();
@@ -1083,7 +1115,18 @@
             }
 
             const data = await response.json();
-            rootEl.replaceChildren(renderTree(data.items));
+            const zoomItemID = zoomItemIDFromURL();
+            let itemsToRender = data.items;
+            if (zoomItemID !== "") {
+              const zoomedItem = findItemByUUID(data.items, zoomItemID);
+              if (zoomedItem) {
+                itemsToRender = [zoomedItem];
+              } else {
+                writeZoomItemIDToURL("", true);
+              }
+            }
+
+            rootEl.replaceChildren(renderTree(itemsToRender));
             clearError();
 
             if (focusUUID) {
@@ -1096,6 +1139,9 @@
 
         document.addEventListener("click", () => {
           closeAllToolMenus();
+        });
+        window.addEventListener("popstate", () => {
+          void loadOutline();
         });
         initThemeControls();
         initDevAutoReload();
