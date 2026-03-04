@@ -20,7 +20,7 @@
         --text-color: #1c2833;
         --item-body-bg: #d9d9dc;
         --item-body-hover-bg: #e6e6e9;
-        --item-body-editing-bg: #f6881f2e;
+        --item-body-editing-bg: #4f76d933;
         --toggle-bg: #2f5f66;
         --toggle-hover-bg: #3d7580;
         --toggle-focus: #5b97a0;
@@ -61,7 +61,7 @@
         --text-color: #e9edf5;
         --item-body-bg: #2a3342;
         --item-body-hover-bg: #343f50;
-        --item-body-editing-bg: #f6881f4a;
+        --item-body-editing-bg: #4da2ff42;
         --toggle-bg: #f6881f;
         --toggle-hover-bg: #ff9e3f;
         --toggle-focus: #ffd2a1;
@@ -98,7 +98,7 @@
         --text-color: #9af3ba;
         --item-body-bg: #0f2b1b;
         --item-body-hover-bg: #143824;
-        --item-body-editing-bg: #f6881f3f;
+        --item-body-editing-bg: #b867ff40;
         --toggle-bg: #21b654;
         --toggle-hover-bg: #2bd166;
         --toggle-focus: #7effac;
@@ -135,7 +135,7 @@
         --text-color: #1d3448;
         --item-body-bg: #d6e8f4;
         --item-body-hover-bg: #e0eef8;
-        --item-body-editing-bg: #f6881f2e;
+        --item-body-editing-bg: #ff9b5a36;
         --toggle-bg: #2a6f97;
         --toggle-hover-bg: #3b87b3;
         --toggle-focus: #5ca7d8;
@@ -172,7 +172,7 @@
         --text-color: #3d2a1a;
         --item-body-bg: #f4dec6;
         --item-body-hover-bg: #f9e6d1;
-        --item-body-editing-bg: #f6881f33;
+        --item-body-editing-bg: #5b79e03a;
         --toggle-bg: #d5792e;
         --toggle-hover-bg: #e08e4c;
         --toggle-focus: #f0b67d;
@@ -209,7 +209,7 @@
         --text-color: #f0f2f7;
         --item-body-bg: #3b3f4a;
         --item-body-hover-bg: #484d59;
-        --item-body-editing-bg: #f6881f42;
+        --item-body-editing-bg: #6fc4ff3f;
         --toggle-bg: #7f8aa3;
         --toggle-hover-bg: #97a5c4;
         --toggle-focus: #c8d0e3;
@@ -362,8 +362,8 @@
         top: calc(100% + 0.12rem);
         left: 0;
         min-width: 6.1rem;
-        background: var(--tool-menu-bg);
-        border: 1px solid var(--tool-menu-border);
+        background: var(--toggle-bg);
+        border: 1px solid var(--controls-divider);
         border-radius: 7px;
         box-shadow: 0 8px 20px #00000026;
         padding: 0.2rem;
@@ -374,7 +374,7 @@
         width: 100%;
         border: none;
         background: transparent;
-        color: var(--tool-menu-text);
+        color: var(--toggle-text);
         text-align: left;
         padding: 0.25rem 0.35rem;
         border-radius: 5px;
@@ -384,7 +384,7 @@
       }
 
       .item-tool-option:hover {
-        background: var(--tool-menu-hover-bg);
+        background: var(--controls-segment-hover);
       }
 
       .item-tool-option:focus-visible {
@@ -463,6 +463,22 @@
         color: var(--error-color);
         font-weight: 600;
       }
+
+      .zoom-context {
+        margin: 0 0 0.75rem 0;
+        font-size: 0.8rem;
+        color: var(--text-color);
+      }
+
+      .zoom-home-link {
+        color: var(--toggle-bg);
+        text-decoration: none;
+        font-weight: 600;
+      }
+
+      .zoom-home-link:hover {
+        text-decoration: underline;
+      }
     </style>
   </head>
   <body>
@@ -476,6 +492,9 @@
     </div>
     <div class="page">
       <main>
+        <div id="zoom-context" class="zoom-context" hidden>
+          <a id="zoom-home-link" class="zoom-home-link" href="/">Back to all items</a>
+        </div>
         <div id="outline-root"></div>
         <p id="outline-error" class="error" hidden></p>
       </main>
@@ -484,6 +503,8 @@
       (() => {
         const errorEl = document.getElementById("outline-error");
         const rootEl = document.getElementById("outline-root");
+        const zoomContextEl = document.getElementById("zoom-context");
+        const zoomHomeLinkEl = document.getElementById("zoom-home-link");
         const themeSelect = document.getElementById("theme-select");
         const themeStorageKey = "orgline-theme";
         const zoomQueryParam = "item_id";
@@ -648,6 +669,23 @@
           }
 
           return null;
+        }
+
+        function setZoomContextVisible(isVisible) {
+          if (!(zoomContextEl instanceof HTMLElement)) {
+            return;
+          }
+
+          zoomContextEl.hidden = !isVisible;
+          if (!isVisible) {
+            return;
+          }
+
+          if (zoomHomeLinkEl instanceof HTMLAnchorElement) {
+            const homeURL = new URL(window.location.href);
+            homeURL.searchParams.delete(zoomQueryParam);
+            zoomHomeLinkEl.href = homeURL.toString();
+          }
         }
 
         function visibleItemUUIDs() {
@@ -1117,16 +1155,19 @@
             const data = await response.json();
             const zoomItemID = zoomItemIDFromURL();
             let itemsToRender = data.items;
+            let isZoomView = false;
             if (zoomItemID !== "") {
               const zoomedItem = findItemByUUID(data.items, zoomItemID);
               if (zoomedItem) {
                 itemsToRender = [zoomedItem];
+                isZoomView = true;
               } else {
                 writeZoomItemIDToURL("", true);
               }
             }
 
             rootEl.replaceChildren(renderTree(itemsToRender));
+            setZoomContextVisible(isZoomView);
             clearError();
 
             if (focusUUID) {
