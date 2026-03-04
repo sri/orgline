@@ -1,0 +1,2 @@
+ALTER TABLE workflow_items
+ADD COLUMN is_open INTEGER NOT NULL DEFAULT 1;

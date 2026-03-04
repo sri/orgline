@@ -22,7 +22,6 @@ func main() {
 	addrFlag := flag.String("addr", os.Getenv("ORGLINE_ADDR"), "HTTP listen address (for example, ':8080' or '127.0.0.1:8080'). Overrides -port when set.")
 	portFlag := flag.Int("port", envIntOrDefault("ORGLINE_PORT", 8080), "HTTP listen port (used when -addr is empty).")
 	dbPathFlag := flag.String("db-path", envOrDefault("ORGLINE_DB_PATH", "orgline.db"), "Path to SQLite database file.")
-	frontendDevURLFlag := flag.String("frontend-dev-url", os.Getenv("ORGLINE_DEV_FRONTEND_URL"), "Frontend dev server URL. When set, requests for '/' are proxied to this URL.")
 	readHeaderTimeoutFlag := flag.Duration("read-header-timeout", envDurationOrDefault("ORGLINE_READ_HEADER_TIMEOUT", 5*time.Second), "HTTP server read header timeout.")
 	readTimeoutFlag := flag.Duration("read-timeout", envDurationOrDefault("ORGLINE_READ_TIMEOUT", 15*time.Second), "HTTP server read timeout.")
 	writeTimeoutFlag := flag.Duration("write-timeout", envDurationOrDefault("ORGLINE_WRITE_TIMEOUT", 15*time.Second), "HTTP server write timeout.")
@@ -47,7 +46,6 @@ func main() {
 	cfg := server.Config{
 		Addr:              addr,
 		DB:                db,
-		FrontendDevURL:    *frontendDevURLFlag,
 		ReadHeaderTimeout: *readHeaderTimeoutFlag,
 		ReadTimeout:       *readTimeoutFlag,
 		WriteTimeout:      *writeTimeoutFlag,

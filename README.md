@@ -9,7 +9,6 @@ The binary supports flags (with matching environment variable defaults):
 - `-port` (`ORGLINE_PORT`) HTTP port when `-addr` is not set. Default: `8080`
 - `-addr` (`ORGLINE_ADDR`) Full HTTP listen address, for example `:8080` or `127.0.0.1:8080`
 - `-db-path` (`ORGLINE_DB_PATH`) SQLite database path. Default: `orgline.db`
-- `-frontend-dev-url` (`ORGLINE_DEV_FRONTEND_URL`) Dev frontend proxy URL
 - `-read-header-timeout` (`ORGLINE_READ_HEADER_TIMEOUT`) Default: `5s`
 - `-read-timeout` (`ORGLINE_READ_TIMEOUT`) Default: `15s`
 - `-write-timeout` (`ORGLINE_WRITE_TIMEOUT`) Default: `15s`

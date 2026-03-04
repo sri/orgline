@@ -3,11 +3,9 @@ package server
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
-	"io/fs"
+	"errors"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
+	"strings"
 	"time"
 
 	"orgline/internal/frontend"
@@ -17,7 +15,6 @@ import (
 type Config struct {
 	Addr              string
 	DB                *sql.DB
-	FrontendDevURL    string
 	ReadHeaderTimeout time.Duration
 	ReadTimeout       time.Duration
 	WriteTimeout      time.Duration
@@ -46,8 +43,13 @@ func New(cfg Config) (*http.Server, error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/hello", helloAPIHandler)
 	mux.HandleFunc("GET /api/items", itemsAPIHandler(workflowStore))
+	mux.HandleFunc("PATCH /api/items/{uuid}", updateItemBodyAPIHandler(workflowStore))
+	mux.HandleFunc("PATCH /api/items/{uuid}/open-state", updateItemOpenStateAPIHandler(workflowStore))
+	mux.HandleFunc("POST /api/items/{uuid}/enter", createItemAfterEnterAPIHandler(workflowStore))
+	mux.HandleFunc("POST /api/items/{uuid}/indent", indentItemAPIHandler(workflowStore))
+	mux.HandleFunc("POST /api/items/{uuid}/outdent", outdentItemAPIHandler(workflowStore))
 
-	frontendHandler, err := newFrontendHandler(cfg)
+	frontendHandler, err := newFrontendHandler()
 	if err != nil {
 		return nil, err
 	}
@@ -98,40 +100,170 @@ func itemsAPIHandler(store *workflow.Store) http.HandlerFunc {
 	}
 }
 
-func newFrontendHandler(cfg Config) (http.Handler, error) {
-	if cfg.FrontendDevURL != "" {
-		target, err := url.Parse(cfg.FrontendDevURL)
+func updateItemBodyAPIHandler(store *workflow.Store) http.HandlerFunc {
+	type request struct {
+		Body string `json:"body"`
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		uuid := r.PathValue("uuid")
+		if uuid == "" {
+			http.Error(w, "missing uuid", http.StatusBadRequest)
+			return
+		}
+
+		var payload request
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&payload); err != nil {
+			http.Error(w, "invalid json body", http.StatusBadRequest)
+			return
+		}
+
+		body := strings.TrimSpace(payload.Body)
+		if body == "" {
+			http.Error(w, "body is required", http.StatusBadRequest)
+			return
+		}
+
+		err := store.UpdateBody(r.Context(), uuid, body)
 		if err != nil {
-			return nil, fmt.Errorf("parse frontend dev url: %w", err)
+			if errors.Is(err, workflow.ErrItemNotFound) {
+				http.NotFound(w, r)
+				return
+			}
+			http.Error(w, "update item", http.StatusInternalServerError)
+			return
 		}
 
-		proxy := httputil.NewSingleHostReverseProxy(target)
-		proxy.ErrorHandler = func(w http.ResponseWriter, _ *http.Request, _ error) {
-			http.Error(w, "frontend dev server unavailable", http.StatusBadGateway)
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func updateItemOpenStateAPIHandler(store *workflow.Store) http.HandlerFunc {
+	type request struct {
+		IsOpen bool `json:"is_open"`
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		uuid := r.PathValue("uuid")
+		if uuid == "" {
+			http.Error(w, "missing uuid", http.StatusBadRequest)
+			return
 		}
 
-		return proxy, nil
-	}
+		var payload request
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&payload); err != nil {
+			http.Error(w, "invalid json body", http.StatusBadRequest)
+			return
+		}
 
-	distFS, err := frontend.DistFS()
+		err := store.UpdateOpenState(r.Context(), uuid, payload.IsOpen)
+		if err != nil {
+			if errors.Is(err, workflow.ErrItemNotFound) {
+				http.NotFound(w, r)
+				return
+			}
+			http.Error(w, "update item open state", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func createItemAfterEnterAPIHandler(store *workflow.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		uuid := r.PathValue("uuid")
+		if uuid == "" {
+			http.Error(w, "missing uuid", http.StatusBadRequest)
+			return
+		}
+
+		newUUID, err := store.CreateAfterEnter(r.Context(), uuid)
+		if err != nil {
+			if errors.Is(err, workflow.ErrItemNotFound) {
+				http.NotFound(w, r)
+				return
+			}
+			http.Error(w, "create item", http.StatusInternalServerError)
+			return
+		}
+
+		response := struct {
+			UUID string `json:"uuid"`
+		}{
+			UUID: newUUID,
+		}
+
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusCreated)
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			http.Error(w, "encode response", http.StatusInternalServerError)
+		}
+	}
+}
+
+func indentItemAPIHandler(store *workflow.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		uuid := r.PathValue("uuid")
+		if uuid == "" {
+			http.Error(w, "missing uuid", http.StatusBadRequest)
+			return
+		}
+
+		_, err := store.IndentItem(r.Context(), uuid)
+		if err != nil {
+			if errors.Is(err, workflow.ErrItemNotFound) {
+				http.NotFound(w, r)
+				return
+			}
+			http.Error(w, "indent item", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func outdentItemAPIHandler(store *workflow.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		uuid := r.PathValue("uuid")
+		if uuid == "" {
+			http.Error(w, "missing uuid", http.StatusBadRequest)
+			return
+		}
+
+		_, err := store.OutdentItem(r.Context(), uuid)
+		if err != nil {
+			if errors.Is(err, workflow.ErrItemNotFound) {
+				http.NotFound(w, r)
+				return
+			}
+			http.Error(w, "outdent item", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func newFrontendHandler() (http.Handler, error) {
+	indexHTML, err := frontend.IndexHTML()
 	if err != nil {
-		return nil, fmt.Errorf("load embedded frontend: %w", err)
+		return nil, err
 	}
 
-	if _, err := fs.Stat(distFS, "site/index.html"); err != nil {
-		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			http.Error(
-				w,
-				"frontend assets are missing; run `just prod` to build and embed them",
-				http.StatusServiceUnavailable,
-			)
-		}), nil
-	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
 
-	siteFS, err := fs.Sub(distFS, "site")
-	if err != nil {
-		return nil, fmt.Errorf("load embedded frontend site fs: %w", err)
-	}
-
-	return http.FileServerFS(siteFS), nil
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = w.Write(indexHTML)
+	}), nil
 }

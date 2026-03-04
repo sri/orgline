@@ -1,0 +1,487 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Orgline</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(circle at 10% 20%, #f9e5c5 0%, transparent 42%),
+          radial-gradient(circle at 90% 80%, #d5f0d7 0%, transparent 45%),
+          linear-gradient(120deg, #f7f3eb, #f3f8ff);
+      }
+
+      main {
+        width: min(42rem, 92vw);
+        border: 1px solid #1d2a331a;
+        border-radius: 14px;
+        background: #ffffffcc;
+        backdrop-filter: blur(4px);
+        padding: 1.8rem;
+        box-shadow: 0 12px 30px #0e25310d;
+      }
+
+      .outline {
+        margin: 0;
+        padding-left: 1rem;
+        list-style: none;
+      }
+
+      .outline ul {
+        margin: 0;
+        padding-left: 1rem;
+        list-style: none;
+      }
+
+      .item-row {
+        display: inline-flex;
+        align-items: stretch;
+        gap: 0;
+        margin: 0.2rem 0;
+        color: #1c2833;
+      }
+
+      .item-toggle {
+        width: 1.85rem;
+        display: inline-grid;
+        place-items: center;
+        padding: 0;
+        border: none;
+        border-radius: 6px 0 0 6px;
+        background: #7e1010;
+        color: #f4f7fb;
+        font-size: 0.72rem;
+        cursor: pointer;
+      }
+
+      .item-toggle:hover {
+        background: #971515;
+      }
+
+      .item-toggle:focus-visible {
+        outline: 1px solid #9a5353;
+        outline-offset: 1px;
+      }
+
+      .item-toggle.is-leaf {
+        cursor: default;
+        opacity: 1;
+        color: #f4f7fb00;
+        background: #8d6d6d;
+      }
+
+      .item-children {
+        margin-left: 1.25rem;
+      }
+
+      .item-body {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.15rem 0.45rem;
+        border-radius: 0 6px 6px 0;
+        background: #d9d9dc;
+        border: none;
+        min-width: 1rem;
+        min-height: 1.35rem;
+        white-space: pre-wrap;
+        transition: background-color 120ms ease;
+      }
+
+      .item-body:hover {
+        background: #e6e6e9;
+      }
+
+      .item-body.editing {
+        background: #efeff1;
+      }
+
+      .item-body:focus,
+      .item-body:focus-visible,
+      .item-body[contenteditable="true"],
+      .item-body[contenteditable="true"]:focus,
+      .item-body[contenteditable="true"]:focus-visible {
+        outline: none !important;
+        border: none !important;
+        box-shadow: none !important;
+        -webkit-box-shadow: none !important;
+        -webkit-appearance: none;
+        appearance: none;
+      }
+
+      .error {
+        color: #8a1c1c;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div id="outline-root"></div>
+      <p id="outline-error" class="error" hidden></p>
+    </main>
+    <script>
+      (() => {
+        const errorEl = document.getElementById("outline-error");
+        const rootEl = document.getElementById("outline-root");
+
+        function suppressFocusChrome(el) {
+          el.style.setProperty("outline", "none", "important");
+          el.style.setProperty("border", "none", "important");
+          el.style.setProperty("box-shadow", "none", "important");
+          el.style.setProperty("-webkit-box-shadow", "none", "important");
+        }
+
+        function clearError() {
+          if (!errorEl) {
+            return;
+          }
+          errorEl.hidden = true;
+          errorEl.textContent = "";
+        }
+
+        function showError(message) {
+          if (!errorEl) {
+            return;
+          }
+          errorEl.hidden = false;
+          errorEl.textContent = message;
+        }
+
+        function placeCaretAtEnd(el) {
+          const selection = window.getSelection();
+          if (!selection) {
+            return;
+          }
+
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          range.collapse(false);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+
+        function focusItemForEditing(uuid) {
+          if (!rootEl) {
+            return;
+          }
+
+          const target = rootEl.querySelector(`.item-body[data-uuid="${uuid}"]`);
+          if (!(target instanceof HTMLElement)) {
+            return;
+          }
+
+          target.contentEditable = "true";
+          target.classList.add("editing");
+          suppressFocusChrome(target);
+          target.focus();
+          placeCaretAtEnd(target);
+        }
+
+        async function saveItemBody(uuid, body) {
+          const response = await fetch(`/api/items/${encodeURIComponent(uuid)}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ body })
+          });
+
+          if (!response.ok) {
+            throw new Error(`save failed with status ${response.status}`);
+          }
+        }
+
+        async function saveItemOpenState(uuid, isOpen) {
+          const response = await fetch(`/api/items/${encodeURIComponent(uuid)}/open-state`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ is_open: isOpen })
+          });
+
+          if (!response.ok) {
+            throw new Error(`save open state failed with status ${response.status}`);
+          }
+        }
+
+        async function createItemAfterEnter(uuid) {
+          const response = await fetch(`/api/items/${encodeURIComponent(uuid)}/enter`, {
+            method: "POST"
+          });
+
+          if (!response.ok) {
+            throw new Error(`create item failed with status ${response.status}`);
+          }
+
+          return response.json();
+        }
+
+        async function indentItem(uuid) {
+          const response = await fetch(`/api/items/${encodeURIComponent(uuid)}/indent`, {
+            method: "POST"
+          });
+          if (!response.ok) {
+            throw new Error(`indent failed with status ${response.status}`);
+          }
+        }
+
+        async function outdentItem(uuid) {
+          const response = await fetch(`/api/items/${encodeURIComponent(uuid)}/outdent`, {
+            method: "POST"
+          });
+          if (!response.ok) {
+            throw new Error(`outdent failed with status ${response.status}`);
+          }
+        }
+
+        function renderBody(item) {
+          let savedBody = item.body;
+          let handlingEnter = false;
+
+          const body = document.createElement("div");
+          body.className = "item-body";
+          body.dataset.uuid = item.uuid;
+          body.textContent = item.body;
+          body.title = `UUID: ${item.uuid}\nUpdated: ${item.updated_at}`;
+          body.contentEditable = "false";
+          body.spellcheck = false;
+          suppressFocusChrome(body);
+
+          body.addEventListener("focus", () => {
+            suppressFocusChrome(body);
+          });
+
+          body.addEventListener("click", () => {
+            if (body.contentEditable === "true") {
+              return;
+            }
+            body.contentEditable = "true";
+            body.classList.add("editing");
+            suppressFocusChrome(body);
+            body.focus();
+            placeCaretAtEnd(body);
+          });
+
+          body.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" && !event.shiftKey) {
+              event.preventDefault();
+              body.contentEditable = "false";
+              body.classList.remove("editing");
+
+              const currentBody = (body.textContent ?? "").trim();
+              body.textContent = currentBody;
+
+              const saveAndCreate = async () => {
+                try {
+                  if (currentBody !== savedBody) {
+                    if (currentBody === "") {
+                      body.textContent = savedBody;
+                      showError("Item body cannot be empty.");
+                      return;
+                    }
+
+                    try {
+                      await saveItemBody(item.uuid, currentBody);
+                      savedBody = currentBody;
+                      clearError();
+                    } catch (error) {
+                      body.textContent = savedBody;
+                      showError(`Unable to save item: ${String(error)}`);
+                      return;
+                    }
+                  }
+
+                  const created = await createItemAfterEnter(item.uuid);
+                  await loadOutline(created.uuid);
+                } catch (error) {
+                  showError(`Unable to create item: ${String(error)}`);
+                } finally {
+                  handlingEnter = false;
+                }
+              };
+
+              handlingEnter = true;
+              void saveAndCreate();
+              return;
+            }
+
+            if (event.key === "Tab") {
+              event.preventDefault();
+              body.contentEditable = "false";
+              body.classList.remove("editing");
+
+              const currentBody = (body.textContent ?? "").trim();
+              body.textContent = currentBody;
+              const moveAction = event.shiftKey ? outdentItem : indentItem;
+
+              const saveAndMove = async () => {
+                try {
+                  if (currentBody !== savedBody) {
+                    if (currentBody === "") {
+                      body.textContent = savedBody;
+                      showError("Item body cannot be empty.");
+                      return;
+                    }
+
+                    try {
+                      await saveItemBody(item.uuid, currentBody);
+                      savedBody = currentBody;
+                      clearError();
+                    } catch (error) {
+                      body.textContent = savedBody;
+                      showError(`Unable to save item: ${String(error)}`);
+                      return;
+                    }
+                  }
+
+                  await moveAction(item.uuid);
+                  await loadOutline(item.uuid);
+                } catch (error) {
+                  showError(`Unable to move item: ${String(error)}`);
+                } finally {
+                  handlingEnter = false;
+                }
+              };
+
+              handlingEnter = true;
+              void saveAndMove();
+            }
+          });
+
+          body.addEventListener("blur", async () => {
+            if (handlingEnter) {
+              return;
+            }
+
+            const currentBody = (body.textContent ?? "").trim();
+            body.contentEditable = "false";
+            body.classList.remove("editing");
+            body.textContent = currentBody;
+
+            if (currentBody === savedBody) {
+              return;
+            }
+            if (currentBody === "") {
+              body.textContent = savedBody;
+              showError("Item body cannot be empty.");
+              return;
+            }
+
+            try {
+              await saveItemBody(item.uuid, currentBody);
+              savedBody = currentBody;
+              clearError();
+            } catch (error) {
+              body.textContent = savedBody;
+              showError(`Unable to save item: ${String(error)}`);
+            }
+          });
+
+          return body;
+        }
+
+        function renderTree(items) {
+          const list = document.createElement("ul");
+          list.className = "outline";
+
+          for (const item of items) {
+            const listItem = document.createElement("li");
+            const row = document.createElement("div");
+            row.className = "item-row";
+
+            const toggle = document.createElement("button");
+            toggle.type = "button";
+            toggle.className = "item-toggle";
+
+            const hasChildren = item.children.length > 0;
+            toggle.textContent = hasChildren ? "▾" : "";
+            toggle.setAttribute("aria-label", hasChildren ? "Collapse children" : "No children");
+            toggle.setAttribute("aria-expanded", hasChildren ? "true" : "false");
+            if (!hasChildren) {
+              toggle.classList.add("is-leaf");
+              toggle.disabled = true;
+            }
+
+            row.appendChild(toggle);
+            row.appendChild(renderBody(item));
+            listItem.appendChild(row);
+
+            if (hasChildren) {
+              const children = document.createElement("div");
+              children.className = "item-children";
+              children.appendChild(renderTree(item.children));
+              listItem.appendChild(children);
+              children.hidden = !item.is_open;
+              toggle.textContent = item.is_open ? "▾" : "▸";
+              toggle.setAttribute("aria-expanded", item.is_open ? "true" : "false");
+              toggle.setAttribute("aria-label", item.is_open ? "Collapse children" : "Expand children");
+
+              toggle.addEventListener("click", async (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const nextIsOpen = children.hidden;
+                const prevHidden = children.hidden;
+                children.hidden = !nextIsOpen;
+                toggle.textContent = nextIsOpen ? "▾" : "▸";
+                toggle.setAttribute("aria-expanded", nextIsOpen ? "true" : "false");
+                toggle.setAttribute("aria-label", nextIsOpen ? "Collapse children" : "Expand children");
+
+                try {
+                  await saveItemOpenState(item.uuid, nextIsOpen);
+                } catch (error) {
+                  children.hidden = prevHidden;
+                  const revertedIsOpen = !prevHidden;
+                  toggle.textContent = revertedIsOpen ? "▾" : "▸";
+                  toggle.setAttribute("aria-expanded", revertedIsOpen ? "true" : "false");
+                  toggle.setAttribute("aria-label", revertedIsOpen ? "Collapse children" : "Expand children");
+                  showError(`Unable to save open state: ${String(error)}`);
+                }
+              });
+            }
+
+            list.appendChild(listItem);
+          }
+
+          return list;
+        }
+
+        async function loadOutline(focusUUID) {
+          if (!errorEl || !rootEl) {
+            return;
+          }
+
+          try {
+            const response = await fetch("/api/items");
+            if (!response.ok) {
+              throw new Error(`request failed with status ${response.status}`);
+            }
+
+            const data = await response.json();
+            rootEl.replaceChildren(renderTree(data.items));
+            clearError();
+
+            if (focusUUID) {
+              focusItemForEditing(focusUUID);
+            }
+          } catch (error) {
+            showError(String(error));
+          }
+        }
+
+        void loadOutline();
+      })();
+    </script>
+  </body>
+</html>
