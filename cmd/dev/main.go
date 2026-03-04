@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -175,17 +176,28 @@ func (r *serverRunner) Stop(timeout time.Duration) error {
 		return nil
 	}
 
-	_ = proc.cmd.Process.Signal(os.Interrupt)
+	pid := proc.cmd.Process.Pid
+	_ = signalProcessGroup(pid, syscall.SIGINT)
 	select {
 	case err := <-proc.done:
-		if err != nil {
+		if !isExpectedStopError(err) {
 			return fmt.Errorf("web process stopped with error: %w", err)
 		}
 		return nil
 	case <-time.After(timeout):
-		_ = proc.cmd.Process.Kill()
+		_ = signalProcessGroup(pid, syscall.SIGTERM)
+		select {
+		case err := <-proc.done:
+			if !isExpectedStopError(err) {
+				return fmt.Errorf("web process stopped after SIGTERM with error: %w", err)
+			}
+			return nil
+		case <-time.After(750 * time.Millisecond):
+		}
+
+		_ = signalProcessGroup(pid, syscall.SIGKILL)
 		err := <-proc.done
-		if err != nil {
+		if !isExpectedStopError(err) {
 			return fmt.Errorf("web process killed after timeout: %w", err)
 		}
 		return nil
@@ -203,6 +215,9 @@ func (r *serverRunner) startLocked() error {
 	)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
+	}
 	cmd.Env = append(os.Environ(),
 		"ORGLINE_DEV_MODE=1",
 		"ORGLINE_DEV_BUILD_ID="+devBuildID,
@@ -285,4 +300,42 @@ func envOrDefault(key, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func signalProcessGroup(pid int, sig syscall.Signal) error {
+	if pid <= 0 {
+		return nil
+	}
+
+	err := syscall.Kill(-pid, sig)
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, syscall.ESRCH) {
+		return nil
+	}
+	return err
+}
+
+func isExpectedStopError(err error) bool {
+	if err == nil {
+		return true
+	}
+
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		return false
+	}
+
+	status, ok := exitErr.Sys().(syscall.WaitStatus)
+	if !ok {
+		return false
+	}
+
+	if status.Signaled() {
+		sig := status.Signal()
+		return sig == syscall.SIGINT || sig == syscall.SIGTERM || sig == syscall.SIGKILL
+	}
+
+	return exitErr.ExitCode() == 130 || exitErr.ExitCode() == 143
 }
