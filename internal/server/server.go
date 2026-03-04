@@ -1,6 +1,7 @@
 package server
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io/fs"
@@ -10,10 +11,12 @@ import (
 	"time"
 
 	"orgline/internal/frontend"
+	"orgline/internal/workflow"
 )
 
 type Config struct {
 	Addr              string
+	DB                *sql.DB
 	FrontendDevURL    string
 	ReadHeaderTimeout time.Duration
 	ReadTimeout       time.Duration
@@ -35,8 +38,14 @@ func New(cfg Config) (*http.Server, error) {
 		cfg.IdleTimeout = 60 * time.Second
 	}
 
+	workflowStore, err := workflow.NewStore(cfg.DB)
+	if err != nil {
+		return nil, err
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/hello", helloAPIHandler)
+	mux.HandleFunc("GET /api/items", itemsAPIHandler(workflowStore))
 
 	frontendHandler, err := newFrontendHandler(cfg)
 	if err != nil {
@@ -65,6 +74,27 @@ func helloAPIHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, "encode response", http.StatusInternalServerError)
+	}
+}
+
+func itemsAPIHandler(store *workflow.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		items, err := store.ListTree(r.Context())
+		if err != nil {
+			http.Error(w, "load items", http.StatusInternalServerError)
+			return
+		}
+
+		response := struct {
+			Items []workflow.Item `json:"items"`
+		}{
+			Items: items,
+		}
+
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			http.Error(w, "encode response", http.StatusInternalServerError)
+		}
 	}
 }
 

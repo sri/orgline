@@ -44,12 +44,9 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if err := db.Close(); err != nil {
-		log.Fatal(err)
-	}
-
 	cfg := server.Config{
 		Addr:              addr,
+		DB:                db,
 		FrontendDevURL:    *frontendDevURLFlag,
 		ReadHeaderTimeout: *readHeaderTimeoutFlag,
 		ReadTimeout:       *readTimeoutFlag,
@@ -59,8 +56,14 @@ func main() {
 
 	srv, err := server.New(cfg)
 	if err != nil {
+		_ = db.Close()
 		log.Fatal(err)
 	}
+	defer func() {
+		if err := db.Close(); err != nil {
+			log.Printf("close sqlite database: %v", err)
+		}
+	}()
 
 	log.Printf("starting server on http://localhost%s", cfg.Addr)
 

@@ -1,5 +1,6 @@
 bin/
 orgline.db
+orgline.db-*
 web/node_modules/
 web/.astro/
 internal/frontend/dist/site/

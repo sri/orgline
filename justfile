@@ -7,7 +7,7 @@ dev:
     if [ ! -d web/node_modules ]; then
         (cd web && npm install --no-audit --no-fund)
     fi
-    (cd web && npm run dev -- --host 127.0.0.1 --port 5173) &
+    (cd web && ORGLINE_DEV_BACKEND_URL=http://127.0.0.1:8080 npm run dev -- --host 127.0.0.1 --port 5173) &
     frontend_pid=$!
     trap 'kill "${frontend_pid}"' EXIT INT TERM
     ORGLINE_DEV_FRONTEND_URL=http://127.0.0.1:5173 go run ./cmd/web

@@ -31,7 +31,7 @@ const renderedAt = new Date().toISOString();
         border-radius: 14px;
         background: #ffffffcc;
         backdrop-filter: blur(4px);
-        padding: 2rem;
+        padding: 1.8rem;
         box-shadow: 0 12px 30px #0e25310d;
       }
 
@@ -45,19 +45,48 @@ const renderedAt = new Date().toISOString();
         color: #23313f;
       }
 
+      .meta {
+        margin-top: 1rem;
+        font-size: 0.9rem;
+      }
+
       code {
         padding: 0.1rem 0.35rem;
         border-radius: 6px;
         background: #1d2a330f;
       }
+
+      .outline {
+        margin: 1rem 0 0;
+        padding-left: 1.2rem;
+      }
+
+      .outline li {
+        margin: 0.2rem 0;
+        color: #1c2833;
+      }
+
+      .item-body {
+        display: inline-block;
+        padding: 0.15rem 0.45rem;
+        border-radius: 6px;
+        background: #ffffff;
+        border: 1px solid #d8e3eb;
+      }
+
+      .error {
+        color: #8a1c1c;
+        font-weight: 600;
+      }
     </style>
   </head>
   <body>
     <main>
-      <h1>Hello World</h1>
-      <p id="server-message">Loading server message...</p>
-      <p>Astro rendered at <code>{renderedAt}</code></p>
-      <p>Edit <code>web/src/typescript/main.ts</code> to see instant updates in dev mode.</p>
+      <h1>Workflow Outline</h1>
+      <p id="outline-status">Loading items...</p>
+      <div id="outline-root"></div>
+      <p id="outline-error" class="error" hidden></p>
+      <p class="meta">Astro rendered at <code>{renderedAt}</code></p>
     </main>
     <script type="module" src="/src/typescript/main.ts"></script>
   </body>
