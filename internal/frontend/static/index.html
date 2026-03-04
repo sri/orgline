@@ -464,6 +464,39 @@
         font-weight: 600;
       }
 
+      .outline-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        margin: 0 0 0.75rem 0;
+        padding: 0.35rem 0.45rem;
+        border-radius: 8px;
+        background: var(--toggle-bg);
+        color: var(--toggle-text);
+      }
+
+      .outline-search {
+        width: min(14rem, 44vw);
+        min-width: 8rem;
+        height: 1.35rem;
+        border-radius: 5px;
+        border: 1px solid var(--controls-divider);
+        background: color-mix(in srgb, var(--toggle-bg) 72%, #ffffff 28%);
+        color: var(--toggle-text);
+        font-size: 0.75rem;
+        padding: 0 0.42rem;
+      }
+
+      .outline-search::placeholder {
+        color: color-mix(in srgb, var(--toggle-text) 72%, transparent 28%);
+      }
+
+      .outline-search:focus-visible {
+        outline: 1px solid var(--toggle-focus);
+        outline-offset: 0;
+      }
+
       .zoom-context {
         margin: 0 0 0.75rem 0;
         font-size: 0.8rem;
@@ -492,6 +525,15 @@
     </div>
     <div class="page">
       <main>
+        <div class="outline-toolbar">
+          <input
+            id="outline-search"
+            class="outline-search"
+            type="search"
+            placeholder="Search"
+            aria-label="Search items"
+          />
+        </div>
         <div id="zoom-context" class="zoom-context" hidden>
           <a id="zoom-home-link" class="zoom-home-link" href="/">Back to all items</a>
         </div>

@@ -337,5 +337,6 @@ func isExpectedStopError(err error) bool {
 		return sig == syscall.SIGINT || sig == syscall.SIGTERM || sig == syscall.SIGKILL
 	}
 
-	return exitErr.ExitCode() == 130 || exitErr.ExitCode() == 143
+	// "go run" commonly returns 1 when it is intentionally interrupted.
+	return exitErr.ExitCode() == 1 || exitErr.ExitCode() == 130 || exitErr.ExitCode() == 143
 }
