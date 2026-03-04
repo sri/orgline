@@ -26,6 +26,8 @@ func main() {
 	readTimeoutFlag := flag.Duration("read-timeout", envDurationOrDefault("ORGLINE_READ_TIMEOUT", 15*time.Second), "HTTP server read timeout.")
 	writeTimeoutFlag := flag.Duration("write-timeout", envDurationOrDefault("ORGLINE_WRITE_TIMEOUT", 15*time.Second), "HTTP server write timeout.")
 	idleTimeoutFlag := flag.Duration("idle-timeout", envDurationOrDefault("ORGLINE_IDLE_TIMEOUT", 60*time.Second), "HTTP server idle timeout.")
+	devModeFlag := flag.Bool("dev", envBoolOrDefault("ORGLINE_DEV_MODE", false), "Enable development endpoints and auto-reload helpers.")
+	devBuildIDFlag := flag.String("dev-build-id", envOrDefault("ORGLINE_DEV_BUILD_ID", ""), "Development build id used for browser auto-reload.")
 	flag.Parse()
 
 	addr, err := resolveAddr(*addrFlag, *portFlag)
@@ -46,6 +48,8 @@ func main() {
 	cfg := server.Config{
 		Addr:              addr,
 		DB:                db,
+		DevMode:           *devModeFlag,
+		DevBuildID:        *devBuildIDFlag,
 		ReadHeaderTimeout: *readHeaderTimeoutFlag,
 		ReadTimeout:       *readTimeoutFlag,
 		WriteTimeout:      *writeTimeoutFlag,
@@ -104,6 +108,21 @@ func envDurationOrDefault(key string, fallback time.Duration) time.Duration {
 	parsed, err := time.ParseDuration(value)
 	if err != nil {
 		log.Printf("invalid %s=%q, using %s", key, value, fallback)
+		return fallback
+	}
+
+	return parsed
+}
+
+func envBoolOrDefault(key string, fallback bool) bool {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		log.Printf("invalid %s=%q, using %t", key, value, fallback)
 		return fallback
 	}
 

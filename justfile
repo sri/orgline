@@ -2,7 +2,7 @@ default:
     @just --list
 
 dev:
-    @go run ./cmd/web
+    @go run ./cmd/dev
 
 prod:
     @mkdir -p ./bin

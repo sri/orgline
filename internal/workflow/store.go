@@ -154,6 +154,46 @@ WHERE uuid = ?
 	return nil
 }
 
+func (s *Store) DeleteItem(ctx context.Context, uuid string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin delete transaction: %w", err)
+	}
+
+	parent, order, err := getCurrentItemPosition(ctx, tx, uuid)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	result, err := tx.ExecContext(ctx, "DELETE FROM workflow_items WHERE uuid = ?", uuid)
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("delete workflow item %q: %w", uuid, err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("read deleted rows: %w", err)
+	}
+	if rowsAffected == 0 {
+		_ = tx.Rollback()
+		return ErrItemNotFound
+	}
+
+	if err := shiftAfterRemoval(ctx, tx, parent, order); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit delete transaction: %w", err)
+	}
+
+	return nil
+}
+
 func (s *Store) CreateAfterEnter(ctx context.Context, currentUUID string) (string, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {

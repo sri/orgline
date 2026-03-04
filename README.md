@@ -21,3 +21,8 @@ Examples:
 ./bin/orgline -addr 127.0.0.1:8081 -db-path ./orgline.db
 ORGLINE_PORT=8082 ORGLINE_DB_PATH=/data/orgline.db ./bin/orgline
 ```
+
+## Development
+
+- `just dev` runs a local dev runner that watches source files, restarts `cmd/web` on changes, and triggers browser auto-reload.
+- `just prod` builds a single deployable binary at `./bin/orgline`.

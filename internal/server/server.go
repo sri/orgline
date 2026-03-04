@@ -1,9 +1,11 @@
 package server
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -15,6 +17,8 @@ import (
 type Config struct {
 	Addr              string
 	DB                *sql.DB
+	DevMode           bool
+	DevBuildID        string
 	ReadHeaderTimeout time.Duration
 	ReadTimeout       time.Duration
 	WriteTimeout      time.Duration
@@ -34,6 +38,9 @@ func New(cfg Config) (*http.Server, error) {
 	if cfg.IdleTimeout <= 0 {
 		cfg.IdleTimeout = 60 * time.Second
 	}
+	if cfg.DevMode && strings.TrimSpace(cfg.DevBuildID) == "" {
+		cfg.DevBuildID = time.Now().UTC().Format(time.RFC3339Nano)
+	}
 
 	workflowStore, err := workflow.NewStore(cfg.DB)
 	if err != nil {
@@ -44,12 +51,16 @@ func New(cfg Config) (*http.Server, error) {
 	mux.HandleFunc("GET /api/hello", helloAPIHandler)
 	mux.HandleFunc("GET /api/items", itemsAPIHandler(workflowStore))
 	mux.HandleFunc("PATCH /api/items/{uuid}", updateItemBodyAPIHandler(workflowStore))
+	mux.HandleFunc("DELETE /api/items/{uuid}", deleteItemAPIHandler(workflowStore))
 	mux.HandleFunc("PATCH /api/items/{uuid}/open-state", updateItemOpenStateAPIHandler(workflowStore))
 	mux.HandleFunc("POST /api/items/{uuid}/enter", createItemAfterEnterAPIHandler(workflowStore))
 	mux.HandleFunc("POST /api/items/{uuid}/indent", indentItemAPIHandler(workflowStore))
 	mux.HandleFunc("POST /api/items/{uuid}/outdent", outdentItemAPIHandler(workflowStore))
+	if cfg.DevMode {
+		mux.HandleFunc("GET /api/dev/build", devBuildAPIHandler(cfg.DevBuildID))
+	}
 
-	frontendHandler, err := newFrontendHandler()
+	frontendHandler, err := newFrontendHandler(cfg.DevMode, cfg.DevBuildID)
 	if err != nil {
 		return nil, err
 	}
@@ -133,6 +144,28 @@ func updateItemBodyAPIHandler(store *workflow.Store) http.HandlerFunc {
 				return
 			}
 			http.Error(w, "update item", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func deleteItemAPIHandler(store *workflow.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		uuid := r.PathValue("uuid")
+		if uuid == "" {
+			http.Error(w, "missing uuid", http.StatusBadRequest)
+			return
+		}
+
+		err := store.DeleteItem(r.Context(), uuid)
+		if err != nil {
+			if errors.Is(err, workflow.ErrItemNotFound) {
+				http.NotFound(w, r)
+				return
+			}
+			http.Error(w, "delete item", http.StatusInternalServerError)
 			return
 		}
 
@@ -250,10 +283,27 @@ func outdentItemAPIHandler(store *workflow.Store) http.HandlerFunc {
 	}
 }
 
-func newFrontendHandler() (http.Handler, error) {
+func devBuildAPIHandler(buildID string) http.HandlerFunc {
+	type response struct {
+		BuildID string `json:"build_id"`
+	}
+
+	return func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		if err := json.NewEncoder(w).Encode(response{BuildID: buildID}); err != nil {
+			http.Error(w, "encode response", http.StatusInternalServerError)
+		}
+	}
+}
+
+func newFrontendHandler(devMode bool, devBuildID string) (http.Handler, error) {
 	indexHTML, err := frontend.IndexHTML()
 	if err != nil {
 		return nil, err
+	}
+	if devMode {
+		indexHTML = injectDevBootstrap(indexHTML, devBuildID)
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -266,4 +316,22 @@ func newFrontendHandler() (http.Handler, error) {
 		w.Header().Set("Cache-Control", "no-store")
 		_, _ = w.Write(indexHTML)
 	}), nil
+}
+
+func injectDevBootstrap(indexHTML []byte, devBuildID string) []byte {
+	snippet := fmt.Sprintf(
+		"<script>window.__ORGLINE_DEV_MODE=true;window.__ORGLINE_DEV_BUILD_ID=%q;</script>\n",
+		devBuildID,
+	)
+	marker := []byte("</head>")
+	markerIndex := bytes.Index(indexHTML, marker)
+	if markerIndex < 0 {
+		return indexHTML
+	}
+
+	out := make([]byte, 0, len(indexHTML)+len(snippet))
+	out = append(out, indexHTML[:markerIndex]...)
+	out = append(out, snippet...)
+	out = append(out, indexHTML[markerIndex:]...)
+	return out
 }

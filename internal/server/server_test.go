@@ -85,6 +85,36 @@ func TestFrontendRootHandler(t *testing.T) {
 	}
 }
 
+func TestFrontendRootHandlerIncludesDevBootstrapWhenEnabled(t *testing.T) {
+	db := setupTestDB(t)
+
+	srv, err := New(Config{
+		Addr:       ":0",
+		DB:         db,
+		DevMode:    true,
+		DevBuildID: "dev-build-123",
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(rec, req)
+
+	if got, want := rec.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "__ORGLINE_DEV_MODE=true") {
+		t.Fatal("expected dev mode bootstrap in HTML")
+	}
+	if !strings.Contains(body, "__ORGLINE_DEV_BUILD_ID=\"dev-build-123\"") {
+		t.Fatal("expected dev build id bootstrap in HTML")
+	}
+}
+
 func TestFrontendNotFound(t *testing.T) {
 	db := setupTestDB(t)
 
@@ -102,6 +132,53 @@ func TestFrontendNotFound(t *testing.T) {
 
 	if got, want := rec.Code, http.StatusNotFound; got != want {
 		t.Fatalf("status = %d, want %d", got, want)
+	}
+}
+
+func TestDevBuildEndpointEnabledOnlyInDevMode(t *testing.T) {
+	db := setupTestDB(t)
+
+	devServer, err := New(Config{
+		Addr:       ":0",
+		DB:         db,
+		DevMode:    true,
+		DevBuildID: "build-xyz",
+	})
+	if err != nil {
+		t.Fatalf("new dev server: %v", err)
+	}
+
+	devReq := httptest.NewRequest(http.MethodGet, "/api/dev/build", nil)
+	devRec := httptest.NewRecorder()
+	devServer.Handler.ServeHTTP(devRec, devReq)
+
+	if got, want := devRec.Code, http.StatusOK; got != want {
+		t.Fatalf("dev endpoint status = %d, want %d", got, want)
+	}
+
+	var devResponse struct {
+		BuildID string `json:"build_id"`
+	}
+	if err := json.NewDecoder(devRec.Body).Decode(&devResponse); err != nil {
+		t.Fatalf("decode dev response: %v", err)
+	}
+	if got, want := devResponse.BuildID, "build-xyz"; got != want {
+		t.Fatalf("build id = %q, want %q", got, want)
+	}
+
+	prodServer, err := New(Config{
+		Addr: ":0",
+		DB:   db,
+	})
+	if err != nil {
+		t.Fatalf("new prod server: %v", err)
+	}
+
+	prodReq := httptest.NewRequest(http.MethodGet, "/api/dev/build", nil)
+	prodRec := httptest.NewRecorder()
+	prodServer.Handler.ServeHTTP(prodRec, prodReq)
+	if got, want := prodRec.Code, http.StatusNotFound; got != want {
+		t.Fatalf("prod endpoint status = %d, want %d", got, want)
 	}
 }
 
@@ -240,6 +317,66 @@ func TestUpdateItemBodyAPIHandlerBadRequest(t *testing.T) {
 	srv.Handler.ServeHTTP(rec, req)
 
 	if got, want := rec.Code, http.StatusBadRequest; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+}
+
+func TestDeleteItemAPIHandler(t *testing.T) {
+	db := setupTestDB(t)
+
+	srv, err := New(Config{
+		Addr: ":0",
+		DB:   db,
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+
+	uuid := "11111111-1111-1111-1111-111111111112"
+	req := httptest.NewRequest(http.MethodDelete, "/api/items/"+uuid, nil)
+	rec := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(rec, req)
+
+	if got, want := rec.Code, http.StatusNoContent; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+
+	var deletedCount int
+	if err := db.QueryRow("SELECT COUNT(*) FROM workflow_items WHERE uuid = ?", uuid).Scan(&deletedCount); err != nil {
+		t.Fatalf("query deleted item count: %v", err)
+	}
+	if deletedCount != 0 {
+		t.Fatalf("deleted item count = %d, want 0", deletedCount)
+	}
+
+	var siblingOrder int
+	if err := db.QueryRow(
+		"SELECT child_order FROM workflow_items WHERE uuid = ?",
+		"11111111-1111-1111-1111-111111111113",
+	).Scan(&siblingOrder); err != nil {
+		t.Fatalf("query sibling after delete: %v", err)
+	}
+	if siblingOrder != 1 {
+		t.Fatalf("sibling child_order = %d, want 1", siblingOrder)
+	}
+}
+
+func TestDeleteItemAPIHandlerNotFound(t *testing.T) {
+	db := setupTestDB(t)
+
+	srv, err := New(Config{
+		Addr: ":0",
+		DB:   db,
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/items/not-a-real-id", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(rec, req)
+
+	if got, want := rec.Code, http.StatusNotFound; got != want {
 		t.Fatalf("status = %d, want %d", got, want)
 	}
 }

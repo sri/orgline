@@ -6,29 +6,241 @@
     <title>Orgline</title>
     <style>
       :root {
-        color-scheme: light;
         font-family: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+        color-scheme: light;
+        --page-bg:
+          radial-gradient(circle at 10% 20%, #f9e5c5 0%, transparent 42%),
+          radial-gradient(circle at 90% 80%, #d5f0d7 0%, transparent 45%),
+          linear-gradient(120deg, #f7f3eb, #f3f8ff);
+        --top-bar-bg: #0000000d;
+        --top-bar-border: #00000014;
+        --main-bg: #ffffffcc;
+        --main-border: #1d2a331a;
+        --main-shadow: #0e25310d;
+        --text-color: #1c2833;
+        --item-body-bg: #d9d9dc;
+        --item-body-hover-bg: #e6e6e9;
+        --item-body-editing-bg: #efeff1;
+        --toggle-bg: #2f5f66;
+        --toggle-hover-bg: #3d7580;
+        --toggle-focus: #5b97a0;
+        --toggle-leaf-bg: #8da8ac;
+        --toggle-text: #f4f7fb;
+        --control-bg: #ffffffca;
+        --control-border: #0000002f;
+        --control-text: #1d2a33;
+        --control-focus: #5b97a0;
+        --error-color: #8a1c1c;
+      }
+
+      :root[data-theme="default"] {
+        color-scheme: light;
+      }
+
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --page-bg:
+          radial-gradient(circle at 15% 8%, #2e343f 0%, transparent 35%),
+          radial-gradient(circle at 88% 88%, #3a2417 0%, transparent 44%),
+          linear-gradient(130deg, #101318, #171d25);
+        --top-bar-bg: #0f1319;
+        --top-bar-border: #2f3946;
+        --main-bg: #171c24eb;
+        --main-border: #3b4657;
+        --main-shadow: #00000066;
+        --text-color: #e9edf5;
+        --item-body-bg: #2a3342;
+        --item-body-hover-bg: #343f50;
+        --item-body-editing-bg: #3b475b;
+        --toggle-bg: #f6881f;
+        --toggle-hover-bg: #ff9e3f;
+        --toggle-focus: #ffd2a1;
+        --toggle-leaf-bg: #7a5a32;
+        --toggle-text: #1c212b;
+        --control-bg: #222a36;
+        --control-border: #4a566a;
+        --control-text: #eef3ff;
+        --control-focus: #f6881f;
+        --error-color: #ff9ca8;
+      }
+
+      :root[data-theme="matrix"] {
+        color-scheme: dark;
+        --page-bg:
+          radial-gradient(circle at 15% 10%, #003114 0%, transparent 35%),
+          radial-gradient(circle at 90% 90%, #001f0d 0%, transparent 40%),
+          linear-gradient(140deg, #020503, #06140a);
+        --top-bar-bg: #031108;
+        --top-bar-border: #0a3d1e;
+        --main-bg: #04170ddf;
+        --main-border: #0f5f30;
+        --main-shadow: #00000080;
+        --text-color: #9af3ba;
+        --item-body-bg: #0f2b1b;
+        --item-body-hover-bg: #143824;
+        --item-body-editing-bg: #19482f;
+        --toggle-bg: #21b654;
+        --toggle-hover-bg: #2bd166;
+        --toggle-focus: #7effac;
+        --toggle-leaf-bg: #246b3c;
+        --toggle-text: #04110a;
+        --control-bg: #0b2014;
+        --control-border: #1b6e3b;
+        --control-text: #9af3ba;
+        --control-focus: #52df81;
+        --error-color: #ff8f8f;
+      }
+
+      :root[data-theme="ocean"] {
+        color-scheme: light;
+        --page-bg:
+          radial-gradient(circle at 12% 12%, #d8f0ff 0%, transparent 40%),
+          radial-gradient(circle at 84% 86%, #d9fff3 0%, transparent 42%),
+          linear-gradient(125deg, #f0f8ff, #edf8f6);
+        --top-bar-bg: #e8f7ff;
+        --top-bar-border: #b6d8ea;
+        --main-bg: #fbfeffed;
+        --main-border: #9ec2d8;
+        --main-shadow: #1f4a621f;
+        --text-color: #1d3448;
+        --item-body-bg: #d6e8f4;
+        --item-body-hover-bg: #e0eef8;
+        --item-body-editing-bg: #e9f4fb;
+        --toggle-bg: #2a6f97;
+        --toggle-hover-bg: #3b87b3;
+        --toggle-focus: #5ca7d8;
+        --toggle-leaf-bg: #8bb0c8;
+        --toggle-text: #f2fbff;
+        --control-bg: #ffffffd1;
+        --control-border: #8fb4c9;
+        --control-text: #1f3e54;
+        --control-focus: #5ca7d8;
+        --error-color: #9a2130;
+      }
+
+      :root[data-theme="solar"] {
+        color-scheme: light;
+        --page-bg:
+          radial-gradient(circle at 14% 14%, #fff4cc 0%, transparent 45%),
+          radial-gradient(circle at 90% 88%, #fde2d0 0%, transparent 45%),
+          linear-gradient(120deg, #fffaf2, #fff3eb);
+        --top-bar-bg: #fff0dd;
+        --top-bar-border: #e7c8a2;
+        --main-bg: #fffef8ef;
+        --main-border: #dabd94;
+        --main-shadow: #6740161f;
+        --text-color: #3d2a1a;
+        --item-body-bg: #f4dec6;
+        --item-body-hover-bg: #f9e6d1;
+        --item-body-editing-bg: #fdeedc;
+        --toggle-bg: #d5792e;
+        --toggle-hover-bg: #e08e4c;
+        --toggle-focus: #f0b67d;
+        --toggle-leaf-bg: #c39d7c;
+        --toggle-text: #fff5ea;
+        --control-bg: #fff7ebd4;
+        --control-border: #cb9f69;
+        --control-text: #553621;
+        --control-focus: #e08e4c;
+        --error-color: #8a1c1c;
+      }
+
+      :root[data-theme="graphite"] {
+        color-scheme: dark;
+        --page-bg:
+          radial-gradient(circle at 10% 8%, #36373f 0%, transparent 36%),
+          radial-gradient(circle at 90% 88%, #2b2c31 0%, transparent 40%),
+          linear-gradient(130deg, #18191d, #24262d);
+        --top-bar-bg: #202228;
+        --top-bar-border: #3f4551;
+        --main-bg: #2a2c34e8;
+        --main-border: #4d5563;
+        --main-shadow: #00000066;
+        --text-color: #f0f2f7;
+        --item-body-bg: #3b3f4a;
+        --item-body-hover-bg: #484d59;
+        --item-body-editing-bg: #525866;
+        --toggle-bg: #7f8aa3;
+        --toggle-hover-bg: #97a5c4;
+        --toggle-focus: #c8d0e3;
+        --toggle-leaf-bg: #697185;
+        --toggle-text: #15171b;
+        --control-bg: #2f3440;
+        --control-border: #5b6578;
+        --control-text: #f2f5fc;
+        --control-focus: #97a5c4;
+        --error-color: #ffafb0;
       }
 
       body {
         margin: 0;
         min-height: 100vh;
-        display: grid;
-        place-items: center;
-        background:
-          radial-gradient(circle at 10% 20%, #f9e5c5 0%, transparent 42%),
-          radial-gradient(circle at 90% 80%, #d5f0d7 0%, transparent 45%),
-          linear-gradient(120deg, #f7f3eb, #f3f8ff);
+        background: var(--page-bg);
+      }
+
+      .top-bar {
+        height: 20px;
+        width: 100%;
+        background: var(--top-bar-bg);
+        border-bottom: 1px solid var(--top-bar-border);
+        display: flex;
+        justify-content: center;
+      }
+
+      .top-bar-inner {
+        width: min(42rem, 92vw);
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+      }
+
+      .top-controls {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .top-controls label {
+        color: var(--control-text);
+        font-size: 0.62rem;
+        letter-spacing: 0.02em;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.2rem;
+      }
+
+      .top-controls select {
+        height: 1rem;
+        padding: 0 0.2rem;
+        border-radius: 4px;
+        border: 1px solid var(--control-border);
+        background: var(--control-bg);
+        color: var(--control-text);
+        font-size: 0.62rem;
+      }
+
+      .top-controls select:focus-visible {
+        outline: 1px solid var(--control-focus);
+        outline-offset: 0;
+      }
+
+      .page {
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        padding-top: 12px;
+        box-sizing: border-box;
       }
 
       main {
         width: min(42rem, 92vw);
-        border: 1px solid #1d2a331a;
+        border: 1px solid var(--main-border);
         border-radius: 14px;
-        background: #ffffffcc;
+        background: var(--main-bg);
         backdrop-filter: blur(4px);
         padding: 1.8rem;
-        box-shadow: 0 12px 30px #0e25310d;
+        box-shadow: 0 12px 30px var(--main-shadow);
       }
 
       .outline {
@@ -48,7 +260,7 @@
         align-items: stretch;
         gap: 0;
         margin: 0.2rem 0;
-        color: #1c2833;
+        color: var(--text-color);
       }
 
       .item-toggle {
@@ -58,18 +270,18 @@
         padding: 0;
         border: none;
         border-radius: 6px 0 0 6px;
-        background: #7e1010;
-        color: #f4f7fb;
+        background: var(--toggle-bg);
+        color: var(--toggle-text);
         font-size: 0.72rem;
         cursor: pointer;
       }
 
       .item-toggle:hover {
-        background: #971515;
+        background: var(--toggle-hover-bg);
       }
 
       .item-toggle:focus-visible {
-        outline: 1px solid #9a5353;
+        outline: 1px solid var(--toggle-focus);
         outline-offset: 1px;
       }
 
@@ -77,7 +289,7 @@
         cursor: default;
         opacity: 1;
         color: #f4f7fb00;
-        background: #8d6d6d;
+        background: var(--toggle-leaf-bg);
       }
 
       .item-children {
@@ -89,7 +301,7 @@
         align-items: center;
         padding: 0.15rem 0.45rem;
         border-radius: 0 6px 6px 0;
-        background: #d9d9dc;
+        background: var(--item-body-bg);
         border: none;
         min-width: 1rem;
         min-height: 1.35rem;
@@ -98,11 +310,11 @@
       }
 
       .item-body:hover {
-        background: #e6e6e9;
+        background: var(--item-body-hover-bg);
       }
 
       .item-body.editing {
-        background: #efeff1;
+        background: var(--item-body-editing-bg);
       }
 
       .item-body:focus,
@@ -119,20 +331,115 @@
       }
 
       .error {
-        color: #8a1c1c;
+        color: var(--error-color);
         font-weight: 600;
       }
     </style>
   </head>
   <body>
-    <main>
-      <div id="outline-root"></div>
-      <p id="outline-error" class="error" hidden></p>
-    </main>
+    <div class="top-bar">
+      <div class="top-bar-inner">
+        <div class="top-controls">
+          <label for="theme-select">Theme</label>
+          <select id="theme-select" aria-label="Theme selector"></select>
+        </div>
+      </div>
+    </div>
+    <div class="page">
+      <main>
+        <div id="outline-root"></div>
+        <p id="outline-error" class="error" hidden></p>
+      </main>
+    </div>
     <script>
       (() => {
         const errorEl = document.getElementById("outline-error");
         const rootEl = document.getElementById("outline-root");
+        const themeSelect = document.getElementById("theme-select");
+        const themeStorageKey = "orgline-theme";
+        const themes = [
+          { id: "default", label: "Default" },
+          { id: "dark", label: "Dark" },
+          { id: "matrix", label: "Matrix" },
+          { id: "ocean", label: "Ocean" },
+          { id: "solar", label: "Solar" },
+          { id: "graphite", label: "Graphite" }
+        ];
+
+        function applyTheme(themeID) {
+          const normalizedTheme = themeID === "wolfram-dark" ? "dark" : themeID;
+          const selectedTheme = themes.some((theme) => theme.id === normalizedTheme) ? normalizedTheme : "default";
+          document.documentElement.dataset.theme = selectedTheme;
+          try {
+            localStorage.setItem(themeStorageKey, selectedTheme);
+          } catch (_error) {
+            // Best effort only.
+          }
+
+          if (themeSelect instanceof HTMLSelectElement) {
+            themeSelect.value = selectedTheme;
+          }
+        }
+
+        function initThemeControls() {
+          if (!(themeSelect instanceof HTMLSelectElement)) {
+            return;
+          }
+
+          themeSelect.replaceChildren();
+          for (const theme of themes) {
+            const option = document.createElement("option");
+            option.value = theme.id;
+            option.textContent = theme.label;
+            themeSelect.appendChild(option);
+          }
+          themeSelect.addEventListener("change", () => {
+            applyTheme(themeSelect.value);
+          });
+
+          let storedTheme = "default";
+          try {
+            storedTheme = localStorage.getItem(themeStorageKey) || "default";
+          } catch (_error) {
+            storedTheme = "default";
+          }
+          applyTheme(storedTheme);
+        }
+
+        function initDevAutoReload() {
+          if (globalThis.__ORGLINE_DEV_MODE !== true) {
+            return;
+          }
+
+          let lastBuildID = typeof globalThis.__ORGLINE_DEV_BUILD_ID === "string"
+            ? globalThis.__ORGLINE_DEV_BUILD_ID
+            : "";
+
+          window.setInterval(async () => {
+            try {
+              const response = await fetch("/api/dev/build", {
+                cache: "no-store"
+              });
+              if (!response.ok) {
+                return;
+              }
+
+              const payload = await response.json();
+              if (!payload || typeof payload.build_id !== "string" || payload.build_id === "") {
+                return;
+              }
+
+              if (lastBuildID !== "" && payload.build_id !== lastBuildID) {
+                window.location.reload();
+                return;
+              }
+
+              lastBuildID = payload.build_id;
+            } catch (_error) {
+              // Ignore transient dev-reload failures while the server restarts.
+            }
+          }, 700);
+        }
 
         function suppressFocusChrome(el) {
           el.style.setProperty("outline", "none", "important");
@@ -215,6 +522,16 @@
           }
         }
 
+        async function deleteItem(uuid) {
+          const response = await fetch(`/api/items/${encodeURIComponent(uuid)}`, {
+            method: "DELETE"
+          });
+
+          if (!response.ok) {
+            throw new Error(`delete item failed with status ${response.status}`);
+          }
+        }
+
         async function createItemAfterEnter(uuid) {
           const response = await fetch(`/api/items/${encodeURIComponent(uuid)}/enter`, {
             method: "POST"
@@ -274,6 +591,47 @@
           });
 
           body.addEventListener("keydown", (event) => {
+            if (event.key === "Backspace") {
+              const currentBody = (body.textContent ?? "").trim();
+              if (currentBody === "") {
+                event.preventDefault();
+                body.contentEditable = "false";
+                body.classList.remove("editing");
+
+                const fallbackFocusUUID = (() => {
+                  if (!rootEl) {
+                    return "";
+                  }
+
+                  const visibleItems = Array.from(
+                    rootEl.querySelectorAll(".item-body[data-uuid]")
+                  ).map((node) => node.dataset.uuid || "");
+
+                  const index = visibleItems.indexOf(item.uuid);
+                  if (index > 0) {
+                    return visibleItems[index - 1];
+                  }
+                  if (index >= 0 && index + 1 < visibleItems.length) {
+                    return visibleItems[index + 1];
+                  }
+                  return "";
+                })();
+
+                handlingEnter = true;
+                void (async () => {
+                  try {
+                    await deleteItem(item.uuid);
+                    await loadOutline(fallbackFocusUUID);
+                  } catch (error) {
+                    showError(`Unable to delete item: ${String(error)}`);
+                  } finally {
+                    handlingEnter = false;
+                  }
+                })();
+                return;
+              }
+            }
+
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
               body.contentEditable = "false";
@@ -480,6 +838,8 @@
           }
         }
 
+        initThemeControls();
+        initDevAutoReload();
         void loadOutline();
       })();
     </script>
