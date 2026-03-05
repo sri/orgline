@@ -329,6 +329,10 @@
         color: var(--favorite-active);
       }
 
+      .top-action.heart-toggle {
+        line-height: 1;
+      }
+
       .top-action-divider {
         width: 1px;
         height: 0.95rem;
@@ -438,7 +442,10 @@
         position: absolute;
         top: calc(100% + 0.12rem);
         right: 0;
-        min-width: 6.1rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.18rem;
+        min-width: 0;
         background: var(--toggle-bg);
         border: 1px solid var(--controls-divider);
         border-radius: 7px;
@@ -449,16 +456,24 @@
         -webkit-user-select: none;
       }
 
+      .item-tool-menu[hidden] {
+        display: none;
+      }
+
       .item-tool-option {
-        width: 100%;
+        width: 1.35rem;
+        height: 1.1rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         border: none;
         background: transparent;
         color: var(--toggle-text);
-        text-align: left;
-        padding: 0.25rem 0.35rem;
+        text-align: center;
+        padding: 0;
         border-radius: 5px;
-        font-size: 0.72rem;
-        line-height: 1.15;
+        font-size: 0.8rem;
+        line-height: 1;
         cursor: pointer;
         user-select: none;
         -webkit-user-select: none;
@@ -474,12 +489,26 @@
       }
 
       .item-tool-option.heart-option {
-        text-align: center;
-        font-size: 0.82rem;
+        font-size: 0.78rem;
       }
 
       .item-tool-option.heart-option.is-active {
         color: var(--favorite-active);
+      }
+
+      .heart-icon {
+        width: 0.8rem;
+        height: 0.8rem;
+        display: block;
+        pointer-events: none;
+      }
+
+      .item-tool-option.heart-option .heart-icon {
+        margin: 0 auto;
+      }
+
+      .item-tool-option.zoom-option {
+        font-size: 0.82rem;
       }
 
       .item-toggle {
@@ -559,6 +588,10 @@
       }
 
       .item-row.is-selected .item-body {
+        background: var(--item-selected-bg);
+      }
+
+      .item-row.is-drag-selected .item-body {
         background: var(--item-selected-bg);
       }
 
@@ -679,11 +712,11 @@
             <span class="top-action-divider" aria-hidden="true"></span>
             <button
               id="favorite-item-btn"
-              class="top-action"
+              class="top-action heart-toggle"
               type="button"
               title="Show favorites only"
               aria-label="Show favorites only"
-            >🤍</button>
+            ></button>
           </div>
           <input
             id="outline-search"
@@ -725,6 +758,8 @@
         let pendingBodySaveCount = 0;
         let selectedItemUUID = "";
         const dirtyEditingItemIDs = new Set();
+        const dragSelectedItemUUIDs = new Set();
+        let dragSelectionActive = false;
         let favoriteFilterActive = false;
         let topActionsBusy = false;
         let lastRenderState = null;
@@ -858,6 +893,20 @@
           errorEl.textContent = message;
         }
 
+        function heartIconMarkup(isActive) {
+          if (isActive) {
+            return `<svg class="heart-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>`;
+          }
+          return `<svg class="heart-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>`;
+        }
+
+        function setHeartIcon(button, isActive) {
+          if (!(button instanceof HTMLButtonElement)) {
+            return;
+          }
+          button.innerHTML = heartIconMarkup(isActive);
+        }
+
         function setTopActionsState() {
           const treeActionsDisabled = topActionsBusy || searchModeActive || !lastRenderState;
           if (treeActionsDisabled) {
@@ -903,7 +952,7 @@
             favoriteItemBtnEl.disabled = topActionsBusy || !hasTreeItems || (!favoriteFilterActive && !hasFavoriteItems);
             favoriteItemBtnEl.classList.toggle("is-active", favoriteFilterActive);
             favoriteItemBtnEl.classList.toggle("is-favorite-active", favoriteFilterActive);
-            favoriteItemBtnEl.textContent = favoriteFilterActive ? "♥" : "🤍";
+            setHeartIcon(favoriteItemBtnEl, favoriteFilterActive);
             favoriteItemBtnEl.setAttribute(
               "title",
               favoriteFilterActive ? "Show all items" : "Show favorites only"
@@ -962,22 +1011,56 @@
           for (const row of rootEl.querySelectorAll(".item-row.is-selected")) {
             row.classList.remove("is-selected");
           }
+          for (const row of rootEl.querySelectorAll(".item-row.is-drag-selected")) {
+            row.classList.remove("is-drag-selected");
+          }
 
           if (selectedItemUUID === "") {
+            for (const uuid of dragSelectedItemUUIDs) {
+              const dragRow = rootEl.querySelector(`.item-row[data-uuid="${escapeSelectorValue(uuid)}"]`);
+              if (dragRow instanceof HTMLElement) {
+                dragRow.classList.add("is-drag-selected");
+              }
+            }
             return;
           }
 
           const row = rootEl.querySelector(`.item-row[data-uuid="${escapeSelectorValue(selectedItemUUID)}"]`);
-          if (!(row instanceof HTMLElement)) {
-            return;
+          if (row instanceof HTMLElement) {
+            row.classList.add("is-selected");
           }
-          row.classList.add("is-selected");
+
+          for (const uuid of dragSelectedItemUUIDs) {
+            if (uuid === selectedItemUUID) {
+              continue;
+            }
+            const dragRow = rootEl.querySelector(`.item-row[data-uuid="${escapeSelectorValue(uuid)}"]`);
+            if (dragRow instanceof HTMLElement) {
+              dragRow.classList.add("is-drag-selected");
+            }
+          }
         }
 
         function setSelectedItem(uuid) {
           selectedItemUUID = uuid || "";
           applySelectedItemUI();
           setTopActionsState();
+        }
+
+        function clearDragSelection() {
+          dragSelectedItemUUIDs.clear();
+          applySelectedItemUI();
+        }
+
+        function addDragSelectionItem(uuid) {
+          if (!uuid) {
+            return;
+          }
+          if (dragSelectedItemUUIDs.has(uuid)) {
+            return;
+          }
+          dragSelectedItemUUIDs.add(uuid);
+          applySelectedItemUI();
         }
 
         function zoomItemIDFromURL() {
@@ -1696,8 +1779,29 @@
             const row = document.createElement("div");
             row.className = "item-row";
             row.dataset.uuid = item.uuid;
-            row.addEventListener("mousedown", () => {
+            row.addEventListener("mousedown", (event) => {
+              if (event.button !== 0) {
+                return;
+              }
+              if (!(event.target instanceof Element)) {
+                return;
+              }
+              if (event.target.closest(".item-controls")) {
+                return;
+              }
+              if (event.target.closest(".item-body.editing")) {
+                return;
+              }
+              clearDragSelection();
+              dragSelectionActive = true;
               setSelectedItem(item.uuid);
+              addDragSelectionItem(item.uuid);
+            });
+            row.addEventListener("mouseenter", () => {
+              if (!dragSelectionActive) {
+                return;
+              }
+              addDragSelectionItem(item.uuid);
             });
 
             const controls = document.createElement("div");
@@ -1719,7 +1823,7 @@
             favoriteOption.type = "button";
             favoriteOption.className = "item-tool-option heart-option";
             favoriteOption.classList.toggle("is-active", item.is_favorite === true);
-            favoriteOption.textContent = item.is_favorite ? "♥" : "🤍";
+            setHeartIcon(favoriteOption, item.is_favorite === true);
             favoriteOption.setAttribute("role", "menuitem");
             favoriteOption.setAttribute("title", item.is_favorite ? "Unfavorite item" : "Favorite item");
             favoriteOption.setAttribute("aria-label", item.is_favorite ? "Unfavorite item" : "Favorite item");
@@ -1752,9 +1856,11 @@
 
             const zoomOption = document.createElement("button");
             zoomOption.type = "button";
-            zoomOption.className = "item-tool-option";
-            zoomOption.textContent = "Zoom";
+            zoomOption.className = "item-tool-option zoom-option";
+            zoomOption.textContent = "⤢";
             zoomOption.setAttribute("role", "menuitem");
+            zoomOption.setAttribute("title", "Zoom into item");
+            zoomOption.setAttribute("aria-label", "Zoom into item");
             zoomOption.addEventListener("click", (event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -2101,6 +2207,12 @@
         });
         window.addEventListener("popstate", () => {
           void loadOutline();
+        });
+        window.addEventListener("mouseup", () => {
+          if (!dragSelectionActive) {
+            return;
+          }
+          dragSelectionActive = false;
         });
 
         initThemeControls();
