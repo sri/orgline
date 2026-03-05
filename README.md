@@ -2,6 +2,10 @@
 
 Outliner built with Go and plain JavaScript.
 
+## Demo
+
+- Local-only demo (no backend required): https://sri.github.io/orgline/index.html?local=true
+
 ## Tech Stack
 
 - Go `1.26` (standard library-first backend)
