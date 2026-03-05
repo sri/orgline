@@ -750,8 +750,14 @@
         const themeStorageKey = "orgline-theme";
         const zoomQueryParam = "item_id";
         const searchMinChars = 2;
+        const localMode = (() => {
+          const value = (new URLSearchParams(window.location.search).get("local") || "").trim().toLowerCase();
+          return value === "true" || value === "1" || value === "yes";
+        })();
 
         let outlineItems = [];
+        let localItems = [];
+        let localItemsInitialized = false;
         let searchModeActive = false;
         let preSearchOpenState = null;
         let searchInputDebounceID = 0;
@@ -836,7 +842,7 @@
         }
 
         function initDevAutoReload() {
-          if (globalThis.__ORGLINE_DEV_MODE !== true) {
+          if (localMode || globalThis.__ORGLINE_DEV_MODE !== true) {
             return;
           }
 
@@ -868,6 +874,57 @@
               // Ignore transient dev-reload failures while the server restarts.
             }
           }, 700);
+        }
+
+        function nowTimestamp() {
+          return new Date().toISOString();
+        }
+
+        function generateUUID() {
+          if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
+            return globalThis.crypto.randomUUID();
+          }
+
+          const randomPart = Math.random().toString(16).slice(2, 14);
+          const secondPart = Math.random().toString(16).slice(2, 14);
+          return `${randomPart.slice(0, 8)}-${randomPart.slice(8, 12)}-4${secondPart.slice(0, 3)}-a${secondPart.slice(3, 6)}-${randomPart.slice(0, 4)}${secondPart.slice(6, 12)}`;
+        }
+
+        function createLocalItem(body = "") {
+          const timestamp = nowTimestamp();
+          return {
+            uuid: generateUUID(),
+            created_at: timestamp,
+            updated_at: timestamp,
+            body,
+            is_open: true,
+            is_favorite: false,
+            children: []
+          };
+        }
+
+        function buildLocalDemoItems() {
+          const root1 = createLocalItem("Outliner Demo");
+          const root1Child1 = createLocalItem("Click to edit any item");
+          const root1Child2 = createLocalItem("Use Enter to create items");
+          const root1Grandchild1 = createLocalItem("Shift+Enter inserts a newline");
+          root1Child2.children.push(root1Grandchild1);
+          root1.children.push(root1Child1, root1Child2);
+
+          const root2 = createLocalItem("Local Mode");
+          const root2Child1 = createLocalItem("No backend requests in ?local=true");
+          const root2Child2 = createLocalItem("Reload clears local data");
+          root2.children.push(root2Child1, root2Child2);
+
+          return [root1, root2];
+        }
+
+        function ensureLocalItemsInitialized() {
+          if (localItemsInitialized) {
+            return;
+          }
+          localItems = buildLocalDemoItems();
+          localItemsInitialized = true;
         }
 
         function suppressFocusChrome(el) {
@@ -1114,6 +1171,30 @@
           }
 
           return null;
+        }
+
+        function findItemLocation(items, uuid, parentItem = null) {
+          for (let index = 0; index < items.length; index += 1) {
+            const item = items[index];
+            if (item.uuid === uuid) {
+              return { item, parentItem, list: items, index };
+            }
+
+            const found = findItemLocation(item.children, uuid, item);
+            if (found) {
+              return found;
+            }
+          }
+
+          return null;
+        }
+
+        function requireItemLocation(uuid) {
+          const location = findItemLocation(outlineItems, uuid);
+          if (!location) {
+            throw new Error(`item not found: ${uuid}`);
+          }
+          return location;
         }
 
         function setZoomContextVisible(isVisible, parentUUID = "") {
@@ -1388,6 +1469,13 @@
         async function saveItemBody(uuid, body) {
           pendingBodySaveCount += 1;
           try {
+            if (localMode) {
+              const { item } = requireItemLocation(uuid);
+              item.body = body;
+              item.updated_at = nowTimestamp();
+              return;
+            }
+
             const response = await fetch(`/api/items/${encodeURIComponent(uuid)}`, {
               method: "PATCH",
               headers: {
@@ -1405,6 +1493,13 @@
         }
 
         async function saveItemOpenState(uuid, isOpen) {
+          if (localMode) {
+            const { item } = requireItemLocation(uuid);
+            item.is_open = isOpen;
+            item.updated_at = nowTimestamp();
+            return;
+          }
+
           const response = await fetch(`/api/items/${encodeURIComponent(uuid)}/open-state`, {
             method: "PATCH",
             headers: {
@@ -1419,6 +1514,13 @@
         }
 
         async function saveItemFavoriteState(uuid, isFavorite) {
+          if (localMode) {
+            const { item } = requireItemLocation(uuid);
+            item.is_favorite = isFavorite;
+            item.updated_at = nowTimestamp();
+            return;
+          }
+
           const response = await fetch(`/api/items/${encodeURIComponent(uuid)}/favorite-state`, {
             method: "PATCH",
             headers: {
@@ -1433,6 +1535,12 @@
         }
 
         async function deleteItem(uuid) {
+          if (localMode) {
+            const location = requireItemLocation(uuid);
+            location.list.splice(location.index, 1);
+            return;
+          }
+
           const response = await fetch(`/api/items/${encodeURIComponent(uuid)}`, {
             method: "DELETE"
           });
@@ -1443,6 +1551,19 @@
         }
 
         async function createItemAfterEnter(uuid) {
+          if (localMode) {
+            const location = requireItemLocation(uuid);
+            const newItem = createLocalItem("");
+            if (location.item.children.length > 0) {
+              location.item.children.unshift(newItem);
+              location.item.is_open = true;
+              location.item.updated_at = nowTimestamp();
+            } else {
+              location.list.splice(location.index + 1, 0, newItem);
+            }
+            return { uuid: newItem.uuid };
+          }
+
           const response = await fetch(`/api/items/${encodeURIComponent(uuid)}/enter`, {
             method: "POST"
           });
@@ -1455,6 +1576,21 @@
         }
 
         async function indentItem(uuid) {
+          if (localMode) {
+            const location = requireItemLocation(uuid);
+            if (location.index === 0) {
+              return;
+            }
+            const previousSibling = location.list[location.index - 1];
+            const movedItem = location.list.splice(location.index, 1)[0];
+            previousSibling.children.push(movedItem);
+            const timestamp = nowTimestamp();
+            previousSibling.is_open = true;
+            previousSibling.updated_at = timestamp;
+            movedItem.updated_at = timestamp;
+            return;
+          }
+
           const response = await fetch(`/api/items/${encodeURIComponent(uuid)}/indent`, {
             method: "POST"
           });
@@ -1464,6 +1600,22 @@
         }
 
         async function outdentItem(uuid) {
+          if (localMode) {
+            const location = requireItemLocation(uuid);
+            if (!location.parentItem) {
+              return;
+            }
+
+            const parentLocation = requireItemLocation(location.parentItem.uuid);
+            const movedItem = location.list.splice(location.index, 1)[0];
+            parentLocation.list.splice(parentLocation.index + 1, 0, movedItem);
+
+            const timestamp = nowTimestamp();
+            movedItem.updated_at = timestamp;
+            parentLocation.item.updated_at = timestamp;
+            return;
+          }
+
           const response = await fetch(`/api/items/${encodeURIComponent(uuid)}/outdent`, {
             method: "POST"
           });
@@ -2023,6 +2175,13 @@
           }
 
           try {
+            if (localMode) {
+              ensureLocalItemsInitialized();
+              outlineItems = localItems;
+              renderOutline(focusUUID);
+              return;
+            }
+
             const response = await fetch("/api/items");
             if (!response.ok) {
               throw new Error(`request failed with status ${response.status}`);
