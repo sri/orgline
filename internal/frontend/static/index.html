@@ -272,15 +272,6 @@
         gap: 0.5rem;
       }
 
-      .top-controls label {
-        color: var(--control-text);
-        font-size: 0.62rem;
-        letter-spacing: 0.02em;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.2rem;
-      }
-
       .top-controls select {
         height: 1rem;
         padding: 0 0.2rem;
@@ -319,6 +310,10 @@
         margin: 0;
         padding-left: 1rem;
         list-style: none;
+      }
+
+      #outline-root {
+        background: transparent;
       }
 
       .outline ul {
@@ -442,7 +437,7 @@
         align-items: center;
         padding: 0.15rem 0.45rem;
         border-radius: 0 6px 6px 0;
-        background: var(--item-body-bg);
+        background: transparent;
         border: none;
         min-width: 1rem;
         min-height: 1.35rem;
@@ -544,7 +539,6 @@
     <div class="top-bar">
       <div class="top-bar-inner">
         <div class="top-controls">
-          <label for="theme-select">Theme</label>
           <select id="theme-select" aria-label="Theme selector"></select>
         </div>
       </div>
@@ -589,12 +583,12 @@
         const dirtyEditingItemIDs = new Set();
 
         const themes = [
-          { id: "default", label: "Default" },
-          { id: "dark", label: "Dark" },
-          { id: "matrix", label: "Matrix" },
-          { id: "ocean", label: "Ocean" },
-          { id: "solar", label: "Solar" },
-          { id: "graphite", label: "Graphite" }
+          { id: "default", label: "default" },
+          { id: "dark", label: "dark" },
+          { id: "matrix", label: "matrix" },
+          { id: "ocean", label: "ocean" },
+          { id: "solar", label: "solar" },
+          { id: "graphite", label: "graphite" }
         ];
 
         function applyTheme(themeID) {
@@ -608,8 +602,37 @@
           }
 
           if (themeSelect instanceof HTMLSelectElement) {
-            themeSelect.value = selectedTheme;
+            rebuildThemeOptions(selectedTheme);
           }
+        }
+
+        function rebuildThemeOptions(selectedThemeID) {
+          if (!(themeSelect instanceof HTMLSelectElement)) {
+            return;
+          }
+
+          themeSelect.replaceChildren();
+          const selectedTheme = themes.find((theme) => theme.id === selectedThemeID) || themes[0];
+          if (!selectedTheme) {
+            return;
+          }
+
+          const selectedOption = document.createElement("option");
+          selectedOption.value = selectedTheme.id;
+          selectedOption.textContent = `${selectedTheme.label} theme`;
+          themeSelect.appendChild(selectedOption);
+
+          for (const theme of themes) {
+            if (theme.id === selectedTheme.id) {
+              continue;
+            }
+            const option = document.createElement("option");
+            option.value = theme.id;
+            option.textContent = theme.label;
+            themeSelect.appendChild(option);
+          }
+
+          themeSelect.value = selectedTheme.id;
         }
 
         function initThemeControls() {
@@ -617,13 +640,6 @@
             return;
           }
 
-          themeSelect.replaceChildren();
-          for (const theme of themes) {
-            const option = document.createElement("option");
-            option.value = theme.id;
-            option.textContent = theme.label;
-            themeSelect.appendChild(option);
-          }
           themeSelect.addEventListener("change", () => {
             applyTheme(themeSelect.value);
           });
