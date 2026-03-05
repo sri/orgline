@@ -284,6 +284,42 @@
         gap: 0.5rem;
       }
 
+      .top-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+      }
+
+      .top-action {
+        width: 1.5rem;
+        height: 1.35rem;
+        padding: 0;
+        border-radius: 4px;
+        border: 1px solid var(--control-border);
+        background: var(--control-bg);
+        color: var(--control-text);
+        font-size: 0.85rem;
+        line-height: 1;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .top-action:hover {
+        background: color-mix(in srgb, var(--control-bg) 72%, #000000 28%);
+      }
+
+      .top-action:focus-visible {
+        outline: 1px solid var(--control-focus);
+        outline-offset: 0;
+      }
+
+      .top-action:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
       .top-controls select {
         height: 1rem;
         padding: 0 0.2rem;
@@ -521,7 +557,7 @@
       .outline-toolbar {
         display: flex;
         align-items: center;
-        justify-content: flex-end;
+        justify-content: space-between;
         gap: 0.5rem;
         margin: 0 0 0.75rem 0;
         padding: 0.35rem 0.45rem;
@@ -593,6 +629,29 @@
     <div class="page">
       <main>
         <div class="outline-toolbar">
+          <div class="top-actions" aria-label="Outline controls">
+            <button
+              id="expand-all-btn"
+              class="top-action"
+              type="button"
+              title="Expand all"
+              aria-label="Expand all"
+            >⤵</button>
+            <button
+              id="expand-level-btn"
+              class="top-action"
+              type="button"
+              title="Expand next level"
+              aria-label="Expand next level"
+            >↧</button>
+            <button
+              id="collapse-all-btn"
+              class="top-action"
+              type="button"
+              title="Collapse all"
+              aria-label="Collapse all"
+            >⤴</button>
+          </div>
           <input
             id="outline-search"
             class="outline-search"
@@ -616,6 +675,9 @@
         const zoomContextEl = document.getElementById("zoom-context");
         const zoomHomeLinkEl = document.getElementById("zoom-home-link");
         const zoomParentLinkEl = document.getElementById("zoom-parent-link");
+        const expandAllBtnEl = document.getElementById("expand-all-btn");
+        const expandLevelBtnEl = document.getElementById("expand-level-btn");
+        const collapseAllBtnEl = document.getElementById("collapse-all-btn");
         const themeSelect = document.getElementById("theme-select");
         const searchInputEl = document.getElementById("outline-search");
         const themeStorageKey = "orgline-theme";
@@ -629,6 +691,8 @@
         let pendingBodySaveCount = 0;
         let selectedItemUUID = "";
         const dirtyEditingItemIDs = new Set();
+        let topActionsBusy = false;
+        let lastRenderState = null;
 
         const themes = [
           { id: "default", label: "default" },
@@ -757,6 +821,45 @@
           }
           errorEl.hidden = false;
           errorEl.textContent = message;
+        }
+
+        function setTopActionsState() {
+          const disabled = topActionsBusy || searchModeActive || !lastRenderState;
+          if (disabled) {
+            if (expandAllBtnEl instanceof HTMLButtonElement) {
+              expandAllBtnEl.disabled = true;
+            }
+            if (expandLevelBtnEl instanceof HTMLButtonElement) {
+              expandLevelBtnEl.disabled = true;
+            }
+            if (collapseAllBtnEl instanceof HTMLButtonElement) {
+              collapseAllBtnEl.disabled = true;
+            }
+            return;
+          }
+
+          const expandableItems = collectExpandableItems(
+            lastRenderState.baseItems,
+            lastRenderState.searchActive,
+            lastRenderState.searchView
+          );
+          const hasCollapsed = expandableItems.some((item) => item.is_open === false);
+          const hasExpanded = expandableItems.some((item) => item.is_open === true);
+          const visibleClosedExpandableItems = collectVisibleClosedExpandableItems(
+            lastRenderState.baseItems,
+            lastRenderState.searchActive,
+            lastRenderState.searchView
+          );
+
+          if (expandAllBtnEl instanceof HTMLButtonElement) {
+            expandAllBtnEl.disabled = !hasCollapsed;
+          }
+          if (expandLevelBtnEl instanceof HTMLButtonElement) {
+            expandLevelBtnEl.disabled = visibleClosedExpandableItems.length === 0;
+          }
+          if (collapseAllBtnEl instanceof HTMLButtonElement) {
+            collapseAllBtnEl.disabled = !hasExpanded;
+          }
         }
 
         function markItemDirty(uuid, isDirty) {
@@ -976,6 +1079,44 @@
           }
 
           return { visibleIDs, matchedIDs, forcedOpenIDs };
+        }
+
+        function collectExpandableItems(items, searchActive, searchView, out = []) {
+          for (const item of items) {
+            const childItems = searchActive
+              ? item.children.filter((child) => searchView.visibleIDs.has(child.uuid))
+              : item.children;
+
+            if (childItems.length > 0) {
+              out.push(item);
+              collectExpandableItems(childItems, searchActive, searchView, out);
+            }
+          }
+          return out;
+        }
+
+        function collectVisibleClosedExpandableItems(items, searchActive, searchView, depth = 1, out = []) {
+          for (const item of items) {
+            const childItems = searchActive
+              ? item.children.filter((child) => searchView.visibleIDs.has(child.uuid))
+              : item.children;
+
+            if (childItems.length === 0) {
+              continue;
+            }
+
+            const isOpen = searchActive
+              ? searchView.forcedOpenIDs.has(item.uuid)
+              : item.is_open;
+
+            if (!isOpen) {
+              out.push({ item, depth });
+              continue;
+            }
+
+            collectVisibleClosedExpandableItems(childItems, searchActive, searchView, depth + 1, out);
+          }
+          return out;
         }
 
         function escapeHTML(value) {
@@ -1624,6 +1765,12 @@
             ? collectSearchView(baseItems, query)
             : { visibleIDs: new Set(), matchedIDs: new Set(), forcedOpenIDs: new Set() };
 
+          lastRenderState = {
+            baseItems,
+            searchActive: searchModeActive,
+            searchView
+          };
+
           rootEl.replaceChildren(renderTree(baseItems, {
             searchActive: searchModeActive,
             query,
@@ -1633,6 +1780,7 @@
 
           setZoomContextVisible(isZoomView, zoomParentUUID);
           closeAllToolMenus();
+          setTopActionsState();
           clearError();
 
           if (focusUUID && !searchModeActive) {
@@ -1657,6 +1805,137 @@
           } catch (error) {
             showError(String(error));
           }
+        }
+
+        async function setAllVisibleItemsOpen(isOpen) {
+          if (!lastRenderState) {
+            return;
+          }
+
+          const targets = collectExpandableItems(
+            lastRenderState.baseItems,
+            lastRenderState.searchActive,
+            lastRenderState.searchView
+          );
+
+          const changedUUIDs = [];
+          for (const item of targets) {
+            if (item.is_open === isOpen) {
+              continue;
+            }
+            item.is_open = isOpen;
+            changedUUIDs.push(item.uuid);
+          }
+
+          renderOutline();
+          if (changedUUIDs.length === 0 || searchModeActive) {
+            return;
+          }
+
+          for (const uuid of changedUUIDs) {
+            await saveItemOpenState(uuid, isOpen);
+          }
+        }
+
+        async function expandVisibleItemsByOneLevel() {
+          if (!lastRenderState) {
+            return;
+          }
+
+          const visibleClosedExpandableItems = collectVisibleClosedExpandableItems(
+            lastRenderState.baseItems,
+            lastRenderState.searchActive,
+            lastRenderState.searchView
+          );
+          if (visibleClosedExpandableItems.length === 0) {
+            return;
+          }
+
+          const nextDepth = Math.min(...visibleClosedExpandableItems.map((entry) => entry.depth));
+          const changedUUIDs = [];
+          for (const entry of visibleClosedExpandableItems) {
+            if (entry.depth !== nextDepth || entry.item.is_open) {
+              continue;
+            }
+            entry.item.is_open = true;
+            changedUUIDs.push(entry.item.uuid);
+          }
+
+          renderOutline();
+          if (changedUUIDs.length === 0 || searchModeActive) {
+            return;
+          }
+
+          for (const uuid of changedUUIDs) {
+            await saveItemOpenState(uuid, true);
+          }
+        }
+
+        function initTopActions() {
+          if (expandAllBtnEl instanceof HTMLButtonElement) {
+            expandAllBtnEl.addEventListener("click", () => {
+              if (topActionsBusy || searchModeActive) {
+                return;
+              }
+              topActionsBusy = true;
+              setTopActionsState();
+              void (async () => {
+                try {
+                  await setAllVisibleItemsOpen(true);
+                  clearError();
+                } catch (error) {
+                  showError(`Unable to expand all: ${String(error)}`);
+                } finally {
+                  topActionsBusy = false;
+                  setTopActionsState();
+                }
+              })();
+            });
+          }
+
+          if (expandLevelBtnEl instanceof HTMLButtonElement) {
+            expandLevelBtnEl.addEventListener("click", () => {
+              if (topActionsBusy || searchModeActive) {
+                return;
+              }
+              topActionsBusy = true;
+              setTopActionsState();
+              void (async () => {
+                try {
+                  await expandVisibleItemsByOneLevel();
+                  clearError();
+                } catch (error) {
+                  showError(`Unable to expand next level: ${String(error)}`);
+                } finally {
+                  topActionsBusy = false;
+                  setTopActionsState();
+                }
+              })();
+            });
+          }
+
+          if (collapseAllBtnEl instanceof HTMLButtonElement) {
+            collapseAllBtnEl.addEventListener("click", () => {
+              if (topActionsBusy || searchModeActive) {
+                return;
+              }
+              topActionsBusy = true;
+              setTopActionsState();
+              void (async () => {
+                try {
+                  await setAllVisibleItemsOpen(false);
+                  clearError();
+                } catch (error) {
+                  showError(`Unable to collapse all: ${String(error)}`);
+                } finally {
+                  topActionsBusy = false;
+                  setTopActionsState();
+                }
+              })();
+            });
+          }
+
+          setTopActionsState();
         }
 
         function initSearchControls() {
@@ -1692,6 +1971,7 @@
         initThemeControls();
         initDevAutoReload();
         initSearchControls();
+        initTopActions();
         void loadOutline();
       })();
     </script>
