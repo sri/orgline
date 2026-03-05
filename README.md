@@ -1,6 +1,6 @@
 # orgline
 
-Workflowy-style outliner built with Go and plain JavaScript.
+Outliner built with Go and plain JavaScript.
 
 ## Tech Stack
 
