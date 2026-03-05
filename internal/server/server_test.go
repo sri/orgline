@@ -228,10 +228,11 @@ func TestItemsAPIHandler(t *testing.T) {
 
 	var response struct {
 		Items []struct {
-			UUID     string `json:"uuid"`
-			Body     string `json:"body"`
-			IsOpen   bool   `json:"is_open"`
-			Children []struct {
+			UUID       string `json:"uuid"`
+			Body       string `json:"body"`
+			IsOpen     bool   `json:"is_open"`
+			IsFavorite bool   `json:"is_favorite"`
+			Children   []struct {
 				UUID string `json:"uuid"`
 				Body string `json:"body"`
 			} `json:"children"`
@@ -264,6 +265,9 @@ func TestItemsAPIHandler(t *testing.T) {
 
 	if !response.Items[0].IsOpen || !response.Items[1].IsOpen {
 		t.Fatal("expected seeded root items to be open")
+	}
+	if response.Items[0].IsFavorite || response.Items[1].IsFavorite {
+		t.Fatal("expected seeded root items to be non-favorite by default")
 	}
 }
 
@@ -439,6 +443,72 @@ func TestUpdateItemOpenStateAPIHandler(t *testing.T) {
 			found = true
 			if item.IsOpen {
 				t.Fatal("expected item to remain closed after reload")
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("item %s not found in list response", uuid)
+	}
+}
+
+func TestUpdateItemFavoriteStateAPIHandler(t *testing.T) {
+	db := setupTestDB(t)
+
+	srv, err := New(Config{
+		Addr: ":0",
+		DB:   db,
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+
+	uuid := "11111111-1111-1111-1111-111111111111"
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/items/"+uuid+"/favorite-state",
+		bytes.NewBufferString(`{"is_favorite":true}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(rec, req)
+
+	if got, want := rec.Code, http.StatusNoContent; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+
+	const selectStatement = `SELECT is_favorite FROM workflow_items WHERE uuid = ?`
+	var isFavorite int
+	if err := db.QueryRow(selectStatement, uuid).Scan(&isFavorite); err != nil {
+		t.Fatalf("query updated favorite state: %v", err)
+	}
+	if isFavorite != 1 {
+		t.Fatalf("is_favorite = %d, want 1", isFavorite)
+	}
+
+	reqList := httptest.NewRequest(http.MethodGet, "/api/items", nil)
+	recList := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(recList, reqList)
+
+	if got, want := recList.Code, http.StatusOK; got != want {
+		t.Fatalf("list status = %d, want %d", got, want)
+	}
+
+	var response struct {
+		Items []struct {
+			UUID       string `json:"uuid"`
+			IsFavorite bool   `json:"is_favorite"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(recList.Body).Decode(&response); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+
+	found := false
+	for _, item := range response.Items {
+		if item.UUID == uuid {
+			found = true
+			if !item.IsFavorite {
+				t.Fatal("expected item to remain favorite after reload")
 			}
 		}
 	}

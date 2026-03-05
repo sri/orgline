@@ -53,6 +53,7 @@ func New(cfg Config) (*http.Server, error) {
 	mux.HandleFunc("PATCH /api/items/{uuid}", updateItemBodyAPIHandler(workflowStore))
 	mux.HandleFunc("DELETE /api/items/{uuid}", deleteItemAPIHandler(workflowStore))
 	mux.HandleFunc("PATCH /api/items/{uuid}/open-state", updateItemOpenStateAPIHandler(workflowStore))
+	mux.HandleFunc("PATCH /api/items/{uuid}/favorite-state", updateItemFavoriteStateAPIHandler(workflowStore))
 	mux.HandleFunc("POST /api/items/{uuid}/enter", createItemAfterEnterAPIHandler(workflowStore))
 	mux.HandleFunc("POST /api/items/{uuid}/indent", indentItemAPIHandler(workflowStore))
 	mux.HandleFunc("POST /api/items/{uuid}/outdent", outdentItemAPIHandler(workflowStore))
@@ -200,6 +201,40 @@ func updateItemOpenStateAPIHandler(store *workflow.Store) http.HandlerFunc {
 				return
 			}
 			http.Error(w, "update item open state", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func updateItemFavoriteStateAPIHandler(store *workflow.Store) http.HandlerFunc {
+	type request struct {
+		IsFavorite bool `json:"is_favorite"`
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		uuid := r.PathValue("uuid")
+		if uuid == "" {
+			http.Error(w, "missing uuid", http.StatusBadRequest)
+			return
+		}
+
+		var payload request
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&payload); err != nil {
+			http.Error(w, "invalid json body", http.StatusBadRequest)
+			return
+		}
+
+		err := store.UpdateFavoriteState(r.Context(), uuid, payload.IsFavorite)
+		if err != nil {
+			if errors.Is(err, workflow.ErrItemNotFound) {
+				http.NotFound(w, r)
+				return
+			}
+			http.Error(w, "update item favorite state", http.StatusInternalServerError)
 			return
 		}
 

@@ -15,12 +15,13 @@ type Store struct {
 }
 
 type Item struct {
-	UUID      string `json:"uuid"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
-	Body      string `json:"body"`
-	IsOpen    bool   `json:"is_open"`
-	Children  []Item `json:"children"`
+	UUID       string `json:"uuid"`
+	CreatedAt  string `json:"created_at"`
+	UpdatedAt  string `json:"updated_at"`
+	Body       string `json:"body"`
+	IsOpen     bool   `json:"is_open"`
+	IsFavorite bool   `json:"is_favorite"`
+	Children   []Item `json:"children"`
 }
 
 type itemRecord struct {
@@ -30,6 +31,7 @@ type itemRecord struct {
 	UpdatedAt  string
 	Body       string
 	IsOpen     int64
+	IsFavorite int64
 }
 
 func NewStore(db *sql.DB) (*Store, error) {
@@ -42,7 +44,7 @@ func NewStore(db *sql.DB) (*Store, error) {
 
 func (s *Store) ListTree(ctx context.Context) ([]Item, error) {
 	const query = `
-SELECT uuid, parent_uuid, created_at, updated_at, body, is_open
+SELECT uuid, parent_uuid, created_at, updated_at, body, is_open, is_favorite
 FROM workflow_items
 ORDER BY COALESCE(parent_uuid, ''), child_order, created_at, uuid
 `
@@ -63,6 +65,7 @@ ORDER BY COALESCE(parent_uuid, ''), child_order, created_at, uuid
 			&record.UpdatedAt,
 			&record.Body,
 			&record.IsOpen,
+			&record.IsFavorite,
 		); err != nil {
 			return nil, fmt.Errorf("scan workflow item: %w", err)
 		}
@@ -88,12 +91,13 @@ func buildTree(parent string, childrenByParent map[string][]itemRecord) []Item {
 
 	for _, record := range records {
 		item := Item{
-			UUID:      record.UUID,
-			CreatedAt: record.CreatedAt,
-			UpdatedAt: record.UpdatedAt,
-			Body:      record.Body,
-			IsOpen:    record.IsOpen != 0,
-			Children:  buildTree(record.UUID, childrenByParent),
+			UUID:       record.UUID,
+			CreatedAt:  record.CreatedAt,
+			UpdatedAt:  record.UpdatedAt,
+			Body:       record.Body,
+			IsOpen:     record.IsOpen != 0,
+			IsFavorite: record.IsFavorite != 0,
+			Children:   buildTree(record.UUID, childrenByParent),
 		}
 		items = append(items, item)
 	}
@@ -140,6 +144,35 @@ WHERE uuid = ?
 	result, err := s.db.ExecContext(ctx, statement, openValue, uuid)
 	if err != nil {
 		return fmt.Errorf("update workflow item open state: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("read updated rows: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return ErrItemNotFound
+	}
+
+	return nil
+}
+
+func (s *Store) UpdateFavoriteState(ctx context.Context, uuid string, isFavorite bool) error {
+	const statement = `
+UPDATE workflow_items
+SET is_favorite = ?, updated_at = CURRENT_TIMESTAMP
+WHERE uuid = ?
+`
+
+	var favoriteValue int
+	if isFavorite {
+		favoriteValue = 1
+	}
+
+	result, err := s.db.ExecContext(ctx, statement, favoriteValue, uuid)
+	if err != nil {
+		return fmt.Errorf("update workflow item favorite state: %w", err)
 	}
 
 	rowsAffected, err := result.RowsAffected()

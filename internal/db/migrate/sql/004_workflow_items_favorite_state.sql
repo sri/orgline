@@ -1,0 +1,2 @@
+ALTER TABLE workflow_items
+ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0;

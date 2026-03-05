@@ -44,6 +44,7 @@
         --control-border: #0000002f;
         --control-text: #1d2a33;
         --control-focus: #5b97a0;
+        --favorite-active: #d93858;
         --error-color: #8a1c1c;
       }
 
@@ -320,6 +321,21 @@
         cursor: not-allowed;
       }
 
+      .top-action.is-active {
+        background: color-mix(in srgb, var(--control-bg) 68%, #ffffff 32%);
+      }
+
+      .top-action.is-favorite-active {
+        color: var(--favorite-active);
+      }
+
+      .top-action-divider {
+        width: 1px;
+        height: 0.95rem;
+        background: color-mix(in srgb, var(--control-border) 82%, #000000 18%);
+        opacity: 0.9;
+      }
+
       .top-controls select {
         height: 1rem;
         padding: 0 0.2rem;
@@ -455,6 +471,15 @@
       .item-tool-option:focus-visible {
         outline: 1px solid var(--tool-focus);
         outline-offset: 0;
+      }
+
+      .item-tool-option.heart-option {
+        text-align: center;
+        font-size: 0.82rem;
+      }
+
+      .item-tool-option.heart-option.is-active {
+        color: var(--favorite-active);
       }
 
       .item-toggle {
@@ -651,6 +676,14 @@
               title="Collapse all"
               aria-label="Collapse all"
             >⤴</button>
+            <span class="top-action-divider" aria-hidden="true"></span>
+            <button
+              id="favorite-item-btn"
+              class="top-action"
+              type="button"
+              title="Show favorites only"
+              aria-label="Show favorites only"
+            >🤍</button>
           </div>
           <input
             id="outline-search"
@@ -678,6 +711,7 @@
         const expandAllBtnEl = document.getElementById("expand-all-btn");
         const expandLevelBtnEl = document.getElementById("expand-level-btn");
         const collapseAllBtnEl = document.getElementById("collapse-all-btn");
+        const favoriteItemBtnEl = document.getElementById("favorite-item-btn");
         const themeSelect = document.getElementById("theme-select");
         const searchInputEl = document.getElementById("outline-search");
         const themeStorageKey = "orgline-theme";
@@ -691,6 +725,7 @@
         let pendingBodySaveCount = 0;
         let selectedItemUUID = "";
         const dirtyEditingItemIDs = new Set();
+        let favoriteFilterActive = false;
         let topActionsBusy = false;
         let lastRenderState = null;
 
@@ -824,8 +859,8 @@
         }
 
         function setTopActionsState() {
-          const disabled = topActionsBusy || searchModeActive || !lastRenderState;
-          if (disabled) {
+          const treeActionsDisabled = topActionsBusy || searchModeActive || !lastRenderState;
+          if (treeActionsDisabled) {
             if (expandAllBtnEl instanceof HTMLButtonElement) {
               expandAllBtnEl.disabled = true;
             }
@@ -835,30 +870,48 @@
             if (collapseAllBtnEl instanceof HTMLButtonElement) {
               collapseAllBtnEl.disabled = true;
             }
-            return;
+          } else {
+            const expandableItems = collectExpandableItems(
+              lastRenderState.baseItems,
+              lastRenderState.searchActive,
+              lastRenderState.searchView
+            );
+            const hasCollapsed = expandableItems.some((item) => item.is_open === false);
+            const hasExpanded = expandableItems.some((item) => item.is_open === true);
+            const visibleClosedExpandableItems = collectVisibleClosedExpandableItems(
+              lastRenderState.baseItems,
+              lastRenderState.searchActive,
+              lastRenderState.searchView
+            );
+
+            if (expandAllBtnEl instanceof HTMLButtonElement) {
+              expandAllBtnEl.disabled = !hasCollapsed;
+            }
+            if (expandLevelBtnEl instanceof HTMLButtonElement) {
+              expandLevelBtnEl.disabled = visibleClosedExpandableItems.length === 0;
+            }
+            if (collapseAllBtnEl instanceof HTMLButtonElement) {
+              collapseAllBtnEl.disabled = !hasExpanded;
+            }
           }
 
-          const expandableItems = collectExpandableItems(
-            lastRenderState.baseItems,
-            lastRenderState.searchActive,
-            lastRenderState.searchView
-          );
-          const hasCollapsed = expandableItems.some((item) => item.is_open === false);
-          const hasExpanded = expandableItems.some((item) => item.is_open === true);
-          const visibleClosedExpandableItems = collectVisibleClosedExpandableItems(
-            lastRenderState.baseItems,
-            lastRenderState.searchActive,
-            lastRenderState.searchView
-          );
+          if (favoriteItemBtnEl instanceof HTMLButtonElement) {
+            const treeItems = lastRenderState ? collectTreeItems(lastRenderState.baseItems, []) : [];
+            const hasTreeItems = treeItems.length > 0;
+            const hasFavoriteItems = treeItems.some((item) => item.is_favorite === true);
 
-          if (expandAllBtnEl instanceof HTMLButtonElement) {
-            expandAllBtnEl.disabled = !hasCollapsed;
-          }
-          if (expandLevelBtnEl instanceof HTMLButtonElement) {
-            expandLevelBtnEl.disabled = visibleClosedExpandableItems.length === 0;
-          }
-          if (collapseAllBtnEl instanceof HTMLButtonElement) {
-            collapseAllBtnEl.disabled = !hasExpanded;
+            favoriteItemBtnEl.disabled = topActionsBusy || !hasTreeItems || (!favoriteFilterActive && !hasFavoriteItems);
+            favoriteItemBtnEl.classList.toggle("is-active", favoriteFilterActive);
+            favoriteItemBtnEl.classList.toggle("is-favorite-active", favoriteFilterActive);
+            favoriteItemBtnEl.textContent = favoriteFilterActive ? "♥" : "🤍";
+            favoriteItemBtnEl.setAttribute(
+              "title",
+              favoriteFilterActive ? "Show all items" : "Show favorites only"
+            );
+            favoriteItemBtnEl.setAttribute(
+              "aria-label",
+              favoriteFilterActive ? "Show all items" : "Show favorites only"
+            );
           }
         }
 
@@ -924,6 +977,7 @@
         function setSelectedItem(uuid) {
           selectedItemUUID = uuid || "";
           applySelectedItemUI();
+          setTopActionsState();
         }
 
         function zoomItemIDFromURL() {
@@ -1091,6 +1145,14 @@
               out.push(item);
               collectExpandableItems(childItems, searchActive, searchView, out);
             }
+          }
+          return out;
+        }
+
+        function collectTreeItems(items, out = []) {
+          for (const item of items) {
+            out.push(item);
+            collectTreeItems(item.children, out);
           }
           return out;
         }
@@ -1270,6 +1332,20 @@
 
           if (!response.ok) {
             throw new Error(`save open state failed with status ${response.status}`);
+          }
+        }
+
+        async function saveItemFavoriteState(uuid, isFavorite) {
+          const response = await fetch(`/api/items/${encodeURIComponent(uuid)}/favorite-state`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ is_favorite: isFavorite })
+          });
+
+          if (!response.ok) {
+            throw new Error(`save favorite state failed with status ${response.status}`);
           }
         }
 
@@ -1606,6 +1682,16 @@
               ? item.children.filter((child) => renderContext.searchView.visibleIDs.has(child.uuid))
               : item.children;
 
+            if (renderContext.favoriteFilterActive && item.is_favorite !== true) {
+              if (childItems.length > 0) {
+                const promotedChildren = renderTree(childItems, renderContext);
+                for (const childNode of Array.from(promotedChildren.children)) {
+                  list.appendChild(childNode);
+                }
+              }
+              continue;
+            }
+
             const listItem = document.createElement("li");
             const row = document.createElement("div");
             row.className = "item-row";
@@ -1628,6 +1714,41 @@
             const toolMenu = document.createElement("div");
             toolMenu.className = "item-tool-menu";
             toolMenu.hidden = true;
+
+            const favoriteOption = document.createElement("button");
+            favoriteOption.type = "button";
+            favoriteOption.className = "item-tool-option heart-option";
+            favoriteOption.classList.toggle("is-active", item.is_favorite === true);
+            favoriteOption.textContent = item.is_favorite ? "♥" : "🤍";
+            favoriteOption.setAttribute("role", "menuitem");
+            favoriteOption.setAttribute("title", item.is_favorite ? "Unfavorite item" : "Favorite item");
+            favoriteOption.setAttribute("aria-label", item.is_favorite ? "Unfavorite item" : "Favorite item");
+            favoriteOption.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setSelectedItem(item.uuid);
+              closeAllToolMenus();
+              const previousIsFavorite = item.is_favorite === true;
+              const nextIsFavorite = !previousIsFavorite;
+              topActionsBusy = true;
+              item.is_favorite = nextIsFavorite;
+              renderOutline();
+              setTopActionsState();
+              void (async () => {
+                try {
+                  await saveItemFavoriteState(item.uuid, nextIsFavorite);
+                  clearError();
+                } catch (error) {
+                  item.is_favorite = previousIsFavorite;
+                  renderOutline();
+                  showError(`Unable to update favorite: ${String(error)}`);
+                } finally {
+                  topActionsBusy = false;
+                  setTopActionsState();
+                }
+              })();
+            });
+            toolMenu.appendChild(favoriteOption);
 
             const zoomOption = document.createElement("button");
             zoomOption.type = "button";
@@ -1768,13 +1889,15 @@
           lastRenderState = {
             baseItems,
             searchActive: searchModeActive,
-            searchView
+            searchView,
+            favoriteFilterActive
           };
 
           rootEl.replaceChildren(renderTree(baseItems, {
             searchActive: searchModeActive,
             query,
-            searchView
+            searchView,
+            favoriteFilterActive
           }));
           applySelectedItemUI();
 
@@ -1911,6 +2034,18 @@
                   setTopActionsState();
                 }
               })();
+            });
+          }
+
+          if (favoriteItemBtnEl instanceof HTMLButtonElement) {
+            favoriteItemBtnEl.addEventListener("click", () => {
+              if (topActionsBusy || !lastRenderState) {
+                return;
+              }
+
+              favoriteFilterActive = !favoriteFilterActive;
+              renderOutline();
+              clearError();
             });
           }
 
