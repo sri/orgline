@@ -21,6 +21,8 @@
         --item-body-bg: #d9d9dc;
         --item-body-hover-bg: #e6e6e9;
         --item-body-editing-bg: #4f76d933;
+        --item-selected-bg: #9db8e173;
+        --item-selected-divider: #5577a8;
         --search-hit-bg: #5f8cf266;
         --search-hit-text: #12284f;
         --toggle-bg: #2f5f66;
@@ -64,6 +66,8 @@
         --item-body-bg: #2a3342;
         --item-body-hover-bg: #343f50;
         --item-body-editing-bg: #4da2ff42;
+        --item-selected-bg: #ffad5475;
+        --item-selected-divider: #dc7d1d;
         --search-hit-bg: #6ab0ff70;
         --search-hit-text: #0b1524;
         --toggle-bg: #f6881f;
@@ -103,6 +107,8 @@
         --item-body-bg: #0f2b1b;
         --item-body-hover-bg: #143824;
         --item-body-editing-bg: #b867ff40;
+        --item-selected-bg: #3fd47a66;
+        --item-selected-divider: #1ea753;
         --search-hit-bg: #dd78ff75;
         --search-hit-text: #17041f;
         --toggle-bg: #21b654;
@@ -142,6 +148,8 @@
         --item-body-bg: #d6e8f4;
         --item-body-hover-bg: #e0eef8;
         --item-body-editing-bg: #ff9b5a36;
+        --item-selected-bg: #8bc4e075;
+        --item-selected-divider: #4e90b7;
         --search-hit-bg: #ffb48380;
         --search-hit-text: #3f1f0e;
         --toggle-bg: #2a6f97;
@@ -181,6 +189,8 @@
         --item-body-bg: #f4dec6;
         --item-body-hover-bg: #f9e6d1;
         --item-body-editing-bg: #5b79e03a;
+        --item-selected-bg: #f0c59173;
+        --item-selected-divider: #ce8f4a;
         --search-hit-bg: #7797ff6e;
         --search-hit-text: #101f4c;
         --toggle-bg: #d5792e;
@@ -220,6 +230,8 @@
         --item-body-bg: #3b3f4a;
         --item-body-hover-bg: #484d59;
         --item-body-editing-bg: #6fc4ff3f;
+        --item-selected-bg: #a4b5d069;
+        --item-selected-divider: #6f84a8;
         --search-hit-bg: #90d5ff76;
         --search-hit-text: #0f1d2a;
         --toggle-bg: #7f8aa3;
@@ -328,6 +340,7 @@
         gap: 0;
         margin: 0.2rem 0;
         color: var(--text-color);
+        border-radius: 6px;
       }
 
       .item-controls {
@@ -336,6 +349,8 @@
         align-items: stretch;
         border-radius: 6px 0 0 6px;
         background: var(--toggle-bg);
+        user-select: none;
+        -webkit-user-select: none;
       }
 
       .item-controls.is-leaf {
@@ -353,6 +368,8 @@
         color: var(--toggle-text);
         font-size: 0.62rem;
         cursor: pointer;
+        user-select: none;
+        -webkit-user-select: none;
       }
 
       .item-tool-trigger:hover {
@@ -375,6 +392,8 @@
         box-shadow: 0 8px 20px #00000026;
         padding: 0.2rem;
         z-index: 50;
+        user-select: none;
+        -webkit-user-select: none;
       }
 
       .item-tool-option {
@@ -388,6 +407,8 @@
         font-size: 0.72rem;
         line-height: 1.15;
         cursor: pointer;
+        user-select: none;
+        -webkit-user-select: none;
       }
 
       .item-tool-option:hover {
@@ -411,6 +432,8 @@
         color: var(--toggle-text);
         font-size: 0.72rem;
         cursor: pointer;
+        user-select: none;
+        -webkit-user-select: none;
       }
 
       .item-toggle:hover {
@@ -443,6 +466,8 @@
         min-height: 1.35rem;
         white-space: pre-wrap;
         transition: background-color 120ms ease;
+        user-select: none;
+        -webkit-user-select: none;
       }
 
       .item-body:hover {
@@ -451,6 +476,8 @@
 
       .item-body.editing {
         background: var(--item-body-editing-bg);
+        user-select: text;
+        -webkit-user-select: text;
       }
 
       .item-body:focus,
@@ -464,6 +491,27 @@
         -webkit-box-shadow: none !important;
         -webkit-appearance: none;
         appearance: none;
+      }
+
+      .item-body[contenteditable="true"] {
+        user-select: text;
+        -webkit-user-select: text;
+      }
+
+      .item-row.is-selected .item-body {
+        background: var(--item-selected-bg);
+      }
+
+      .item-row.is-selected .item-controls {
+        background: var(--toggle-bg);
+      }
+
+      .item-row.is-selected .item-controls.is-leaf {
+        background: var(--toggle-leaf-bg);
+      }
+
+      .item-row.is-selected .item-toggle {
+        border-left-color: var(--controls-divider);
       }
 
       .error {
@@ -580,6 +628,7 @@
         let preSearchOpenState = null;
         let searchInputDebounceID = 0;
         let pendingBodySaveCount = 0;
+        let selectedItemUUID = "";
         const dirtyEditingItemIDs = new Set();
 
         const themes = [
@@ -741,6 +790,38 @@
               trigger.setAttribute("aria-expanded", "false");
             }
           }
+        }
+
+        function escapeSelectorValue(value) {
+          if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+            return CSS.escape(value);
+          }
+          return value.replaceAll("\"", "\\\"");
+        }
+
+        function applySelectedItemUI() {
+          if (!rootEl) {
+            return;
+          }
+
+          for (const row of rootEl.querySelectorAll(".item-row.is-selected")) {
+            row.classList.remove("is-selected");
+          }
+
+          if (selectedItemUUID === "") {
+            return;
+          }
+
+          const row = rootEl.querySelector(`.item-row[data-uuid="${escapeSelectorValue(selectedItemUUID)}"]`);
+          if (!(row instanceof HTMLElement)) {
+            return;
+          }
+          row.classList.add("is-selected");
+        }
+
+        function setSelectedItem(uuid) {
+          selectedItemUUID = uuid || "";
+          applySelectedItemUI();
         }
 
         function zoomItemIDFromURL() {
@@ -1047,6 +1128,7 @@
 
           target.contentEditable = "true";
           target.classList.add("editing");
+          setSelectedItem(uuid);
           suppressFocusChrome(target);
           target.focus();
           placeCaretAtEnd(target);
@@ -1155,6 +1237,7 @@
           }
 
           body.addEventListener("focus", () => {
+            setSelectedItem(item.uuid);
             suppressFocusChrome(body);
           });
 
@@ -1162,6 +1245,7 @@
             if (renderContext.searchActive || body.contentEditable === "true") {
               return;
             }
+            setSelectedItem(item.uuid);
             body.contentEditable = "true";
             body.classList.add("editing");
             suppressFocusChrome(body);
@@ -1407,6 +1491,10 @@
             const listItem = document.createElement("li");
             const row = document.createElement("div");
             row.className = "item-row";
+            row.dataset.uuid = item.uuid;
+            row.addEventListener("mousedown", () => {
+              setSelectedItem(item.uuid);
+            });
 
             const controls = document.createElement("div");
             controls.className = "item-controls";
@@ -1431,6 +1519,7 @@
             zoomOption.addEventListener("click", (event) => {
               event.preventDefault();
               event.stopPropagation();
+              setSelectedItem(item.uuid);
               closeAllToolMenus();
               zoomToItem(item.uuid);
               void loadOutline(item.uuid);
@@ -1440,6 +1529,7 @@
             toolTrigger.addEventListener("click", (event) => {
               event.preventDefault();
               event.stopPropagation();
+              setSelectedItem(item.uuid);
               const willOpen = toolMenu.hidden;
               closeAllToolMenus();
               toolMenu.hidden = !willOpen;
@@ -1490,6 +1580,7 @@
                 toggle.addEventListener("click", async (event) => {
                   event.preventDefault();
                   event.stopPropagation();
+                  setSelectedItem(item.uuid);
 
                   const nextIsOpen = children.hidden;
                   const prevHidden = children.hidden;
@@ -1561,6 +1652,7 @@
             query,
             searchView
           }));
+          applySelectedItemUI();
 
           setZoomContextVisible(isZoomView, zoomParentUUID);
           closeAllToolMenus();
