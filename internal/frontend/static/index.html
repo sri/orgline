@@ -456,8 +456,7 @@
       }
 
       .item-body {
-        display: inline-flex;
-        align-items: center;
+        display: inline-block;
         padding: 0.15rem 0.45rem;
         border-radius: 0 6px 6px 0;
         background: transparent;
@@ -556,7 +555,7 @@
         background: var(--search-hit-bg);
         color: var(--search-hit-text);
         border-radius: 3px;
-        padding: 0 0.03rem;
+        padding: 0;
       }
 
       .zoom-context {
@@ -1009,25 +1008,6 @@
           return ranges;
         }
 
-        function mergeWindows(windows) {
-          if (windows.length <= 1) {
-            return windows;
-          }
-
-          windows.sort((a, b) => a.start - b.start || a.end - b.end);
-          const merged = [windows[0]];
-          for (let i = 1; i < windows.length; i += 1) {
-            const previous = merged[merged.length - 1];
-            const current = windows[i];
-            if (current.start <= previous.end) {
-              previous.end = Math.max(previous.end, current.end);
-            } else {
-              merged.push(current);
-            }
-          }
-          return merged;
-        }
-
         function highlightedSliceHTML(text, sliceStart, sliceEnd, ranges) {
           let html = "";
           let cursor = sliceStart;
@@ -1054,28 +1034,13 @@
           return html;
         }
 
-        function buildMatchSnippetHTML(text, query) {
+        function buildHighlightedBodyHTML(text, query) {
           const ranges = findMatchRanges(text, query);
           if (ranges.length === 0) {
             return escapeHTML(text);
           }
 
-          const contextChars = 18;
-          const windows = ranges.map((range) => ({
-            start: Math.max(0, range.start - contextChars),
-            end: Math.min(text.length, range.end + contextChars)
-          }));
-
-          const mergedWindows = mergeWindows(windows);
-          const segments = [];
-          for (const windowRange of mergedWindows) {
-            const prefix = windowRange.start > 0 ? "..." : "";
-            const suffix = windowRange.end < text.length ? "..." : "";
-            const highlighted = highlightedSliceHTML(text, windowRange.start, windowRange.end, ranges);
-            segments.push(`${prefix}${highlighted}${suffix}`);
-          }
-
-          return segments.join(" ");
+          return highlightedSliceHTML(text, 0, text.length, ranges);
         }
 
         function visibleItemUUIDs() {
@@ -1220,7 +1185,7 @@
 
           const isSearchMatch = renderContext.searchActive && renderContext.searchView.matchedIDs.has(item.uuid);
           if (isSearchMatch) {
-            body.innerHTML = buildMatchSnippetHTML(item.body, renderContext.query);
+            body.innerHTML = buildHighlightedBodyHTML(item.body, renderContext.query);
           } else {
             body.textContent = item.body;
           }
@@ -1242,10 +1207,12 @@
           });
 
           body.addEventListener("click", () => {
-            if (renderContext.searchActive || body.contentEditable === "true") {
+            if (body.contentEditable === "true") {
               return;
             }
             setSelectedItem(item.uuid);
+            // Drop highlight markup when entering edit mode.
+            body.textContent = item.body;
             body.contentEditable = "true";
             body.classList.add("editing");
             suppressFocusChrome(body);
@@ -1255,9 +1222,7 @@
           });
 
           body.addEventListener("input", () => {
-            if (!renderContext.searchActive) {
-              syncDirtyState();
-            }
+            syncDirtyState();
           });
 
           body.addEventListener("keydown", (event) => {
@@ -1439,7 +1404,7 @@
           });
 
           body.addEventListener("blur", async () => {
-            if (renderContext.searchActive || handlingEnter) {
+            if (handlingEnter) {
               return;
             }
 
@@ -1450,12 +1415,18 @@
 
             if (currentBody === savedBody) {
               markItemDirty(item.uuid, false);
+              if (renderContext.searchActive) {
+                renderOutline();
+              }
               return;
             }
             if (currentBody === "") {
               body.textContent = savedBody;
               markItemDirty(item.uuid, false);
               showError("Item body cannot be empty.");
+              if (renderContext.searchActive) {
+                renderOutline();
+              }
               return;
             }
 
@@ -1465,10 +1436,16 @@
               item.body = currentBody;
               markItemDirty(item.uuid, false);
               clearError();
+              if (renderContext.searchActive) {
+                renderOutline();
+              }
             } catch (error) {
               body.textContent = savedBody;
               markItemDirty(item.uuid, false);
               showError(`Unable to save item: ${String(error)}`);
+              if (renderContext.searchActive) {
+                renderOutline();
+              }
             }
           });
 
