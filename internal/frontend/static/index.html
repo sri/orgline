@@ -585,6 +585,8 @@
         let searchModeActive = false;
         let preSearchOpenState = null;
         let searchInputDebounceID = 0;
+        let pendingBodySaveCount = 0;
+        const dirtyEditingItemIDs = new Set();
 
         const themes = [
           { id: "default", label: "Default" },
@@ -691,6 +693,21 @@
           }
           errorEl.hidden = false;
           errorEl.textContent = message;
+        }
+
+        function markItemDirty(uuid, isDirty) {
+          if (!uuid) {
+            return;
+          }
+          if (isDirty) {
+            dirtyEditingItemIDs.add(uuid);
+            return;
+          }
+          dirtyEditingItemIDs.delete(uuid);
+        }
+
+        function hasUnsavedChanges() {
+          return pendingBodySaveCount > 0 || dirtyEditingItemIDs.size > 0;
         }
 
         function closeAllToolMenus() {
@@ -1020,16 +1037,21 @@
         }
 
         async function saveItemBody(uuid, body) {
-          const response = await fetch(`/api/items/${encodeURIComponent(uuid)}`, {
-            method: "PATCH",
-            headers: {
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({ body })
-          });
+          pendingBodySaveCount += 1;
+          try {
+            const response = await fetch(`/api/items/${encodeURIComponent(uuid)}`, {
+              method: "PATCH",
+              headers: {
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({ body })
+            });
 
-          if (!response.ok) {
-            throw new Error(`save failed with status ${response.status}`);
+            if (!response.ok) {
+              throw new Error(`save failed with status ${response.status}`);
+            }
+          } finally {
+            pendingBodySaveCount = Math.max(0, pendingBodySaveCount - 1);
           }
         }
 
@@ -1107,6 +1129,15 @@
 
           suppressFocusChrome(body);
 
+          function currentBodyText() {
+            return (body.textContent ?? "").trim();
+          }
+
+          function syncDirtyState() {
+            const isEditing = body.contentEditable === "true";
+            markItemDirty(item.uuid, isEditing && currentBodyText() !== savedBody);
+          }
+
           body.addEventListener("focus", () => {
             suppressFocusChrome(body);
           });
@@ -1120,6 +1151,13 @@
             suppressFocusChrome(body);
             body.focus();
             placeCaretAtEnd(body);
+            syncDirtyState();
+          });
+
+          body.addEventListener("input", () => {
+            if (!renderContext.searchActive) {
+              syncDirtyState();
+            }
           });
 
           body.addEventListener("keydown", (event) => {
@@ -1138,8 +1176,9 @@
               body.contentEditable = "false";
               body.classList.remove("editing");
 
-              const currentBody = (body.textContent ?? "").trim();
+              const currentBody = currentBodyText();
               body.textContent = currentBody;
+              markItemDirty(item.uuid, currentBody !== savedBody);
               const moveDirection = event.key === "ArrowUp" ? -1 : 1;
               const targetUUID = adjacentItemUUID(item.uuid, moveDirection);
 
@@ -1148,6 +1187,7 @@
                   if (currentBody !== savedBody) {
                     if (currentBody === "") {
                       body.textContent = savedBody;
+                      markItemDirty(item.uuid, false);
                       showError("Item body cannot be empty.");
                       return;
                     }
@@ -1155,9 +1195,11 @@
                     try {
                       await saveItemBody(item.uuid, currentBody);
                       savedBody = currentBody;
+                      markItemDirty(item.uuid, false);
                       clearError();
                     } catch (error) {
                       body.textContent = savedBody;
+                      markItemDirty(item.uuid, false);
                       showError(`Unable to save item: ${String(error)}`);
                       return;
                     }
@@ -1184,6 +1226,7 @@
                 event.preventDefault();
                 body.contentEditable = "false";
                 body.classList.remove("editing");
+                markItemDirty(item.uuid, false);
 
                 const fallbackFocusUUID = adjacentItemUUID(item.uuid, -1) || adjacentItemUUID(item.uuid, 1);
 
@@ -1207,14 +1250,16 @@
               body.contentEditable = "false";
               body.classList.remove("editing");
 
-              const currentBody = (body.textContent ?? "").trim();
+              const currentBody = currentBodyText();
               body.textContent = currentBody;
+              markItemDirty(item.uuid, currentBody !== savedBody);
 
               const saveAndCreate = async () => {
                 try {
                   if (currentBody !== savedBody) {
                     if (currentBody === "") {
                       body.textContent = savedBody;
+                      markItemDirty(item.uuid, false);
                       showError("Item body cannot be empty.");
                       return;
                     }
@@ -1222,9 +1267,11 @@
                     try {
                       await saveItemBody(item.uuid, currentBody);
                       savedBody = currentBody;
+                      markItemDirty(item.uuid, false);
                       clearError();
                     } catch (error) {
                       body.textContent = savedBody;
+                      markItemDirty(item.uuid, false);
                       showError(`Unable to save item: ${String(error)}`);
                       return;
                     }
@@ -1249,8 +1296,9 @@
               body.contentEditable = "false";
               body.classList.remove("editing");
 
-              const currentBody = (body.textContent ?? "").trim();
+              const currentBody = currentBodyText();
               body.textContent = currentBody;
+              markItemDirty(item.uuid, currentBody !== savedBody);
               const moveAction = event.shiftKey ? outdentItem : indentItem;
 
               const saveAndMove = async () => {
@@ -1258,6 +1306,7 @@
                   if (currentBody !== savedBody) {
                     if (currentBody === "") {
                       body.textContent = savedBody;
+                      markItemDirty(item.uuid, false);
                       showError("Item body cannot be empty.");
                       return;
                     }
@@ -1265,9 +1314,11 @@
                     try {
                       await saveItemBody(item.uuid, currentBody);
                       savedBody = currentBody;
+                      markItemDirty(item.uuid, false);
                       clearError();
                     } catch (error) {
                       body.textContent = savedBody;
+                      markItemDirty(item.uuid, false);
                       showError(`Unable to save item: ${String(error)}`);
                       return;
                     }
@@ -1292,16 +1343,18 @@
               return;
             }
 
-            const currentBody = (body.textContent ?? "").trim();
+            const currentBody = currentBodyText();
             body.contentEditable = "false";
             body.classList.remove("editing");
             body.textContent = currentBody;
 
             if (currentBody === savedBody) {
+              markItemDirty(item.uuid, false);
               return;
             }
             if (currentBody === "") {
               body.textContent = savedBody;
+              markItemDirty(item.uuid, false);
               showError("Item body cannot be empty.");
               return;
             }
@@ -1310,9 +1363,11 @@
               await saveItemBody(item.uuid, currentBody);
               savedBody = currentBody;
               item.body = currentBody;
+              markItemDirty(item.uuid, false);
               clearError();
             } catch (error) {
               body.textContent = savedBody;
+              markItemDirty(item.uuid, false);
               showError(`Unable to save item: ${String(error)}`);
             }
           });
@@ -1536,6 +1591,14 @@
 
         document.addEventListener("click", () => {
           closeAllToolMenus();
+        });
+        window.addEventListener("beforeunload", (event) => {
+          if (!hasUnsavedChanges()) {
+            return;
+          }
+
+          event.preventDefault();
+          event.returnValue = "";
         });
         window.addEventListener("popstate", () => {
           void loadOutline();
