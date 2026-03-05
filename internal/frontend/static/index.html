@@ -1449,7 +1449,7 @@
         }
 
         function focusItemForEditing(uuid) {
-          if (!rootEl || searchModeActive) {
+          if (!rootEl) {
             return;
           }
 
@@ -1678,10 +1678,6 @@
           });
 
           body.addEventListener("keydown", (event) => {
-            if (renderContext.searchActive) {
-              return;
-            }
-
             if (
               (event.key === "ArrowUp" || event.key === "ArrowDown") &&
               !event.shiftKey &&
@@ -1734,6 +1730,10 @@
 
               handlingEnter = true;
               void saveAndNavigate();
+              return;
+            }
+
+            if (renderContext.searchActive) {
               return;
             }
 
@@ -2164,7 +2164,7 @@
           setTopActionsState();
           clearError();
 
-          if (focusUUID && !searchModeActive) {
+          if (focusUUID) {
             focusItemForEditing(focusUUID);
           }
         }
