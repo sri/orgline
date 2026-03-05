@@ -14,6 +14,7 @@ import (
 
 	"orgline/internal/db/migrate"
 	"orgline/internal/db/sqlite"
+	"orgline/internal/workflow"
 )
 
 func TestHelloAPIHandler(t *testing.T) {
@@ -716,6 +717,319 @@ func TestOutdentItemAPIHandler(t *testing.T) {
 	}
 	if childOrder != 3 {
 		t.Fatalf("child_order = %d, want 3", childOrder)
+	}
+}
+
+func TestUpdateItemBodyAPIHandlerNotFound(t *testing.T) {
+	db := setupTestDB(t)
+
+	srv, err := New(Config{
+		Addr: ":0",
+		DB:   db,
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/items/not-a-real-id",
+		bytes.NewBufferString(`{"body":"updated"}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(rec, req)
+
+	if got, want := rec.Code, http.StatusNotFound; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+}
+
+func TestUpdateItemBodyAPIHandlerInvalidJSON(t *testing.T) {
+	db := setupTestDB(t)
+
+	srv, err := New(Config{
+		Addr: ":0",
+		DB:   db,
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+
+	req := httptest.NewRequest(
+		http.MethodPatch,
+		"/api/items/11111111-1111-1111-1111-111111111112",
+		bytes.NewBufferString(`{"body":"updated","unknown":true}`),
+	)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(rec, req)
+
+	if got, want := rec.Code, http.StatusBadRequest; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+}
+
+func TestUpdateItemOpenStateAPIHandlerInvalidJSONAndNotFound(t *testing.T) {
+	db := setupTestDB(t)
+
+	srv, err := New(Config{
+		Addr: ":0",
+		DB:   db,
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+
+	t.Run("invalid json", func(t *testing.T) {
+		req := httptest.NewRequest(
+			http.MethodPatch,
+			"/api/items/11111111-1111-1111-1111-111111111111/open-state",
+			bytes.NewBufferString(`{"is_open":false,"unknown":true}`),
+		)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		srv.Handler.ServeHTTP(rec, req)
+
+		if got, want := rec.Code, http.StatusBadRequest; got != want {
+			t.Fatalf("status = %d, want %d", got, want)
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		req := httptest.NewRequest(
+			http.MethodPatch,
+			"/api/items/not-a-real-id/open-state",
+			bytes.NewBufferString(`{"is_open":false}`),
+		)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		srv.Handler.ServeHTTP(rec, req)
+
+		if got, want := rec.Code, http.StatusNotFound; got != want {
+			t.Fatalf("status = %d, want %d", got, want)
+		}
+	})
+}
+
+func TestUpdateItemFavoriteStateAPIHandlerInvalidJSONAndNotFound(t *testing.T) {
+	db := setupTestDB(t)
+
+	srv, err := New(Config{
+		Addr: ":0",
+		DB:   db,
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+
+	t.Run("invalid json", func(t *testing.T) {
+		req := httptest.NewRequest(
+			http.MethodPatch,
+			"/api/items/11111111-1111-1111-1111-111111111111/favorite-state",
+			bytes.NewBufferString(`{"is_favorite":true,"unknown":true}`),
+		)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		srv.Handler.ServeHTTP(rec, req)
+
+		if got, want := rec.Code, http.StatusBadRequest; got != want {
+			t.Fatalf("status = %d, want %d", got, want)
+		}
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		req := httptest.NewRequest(
+			http.MethodPatch,
+			"/api/items/not-a-real-id/favorite-state",
+			bytes.NewBufferString(`{"is_favorite":true}`),
+		)
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		srv.Handler.ServeHTTP(rec, req)
+
+		if got, want := rec.Code, http.StatusNotFound; got != want {
+			t.Fatalf("status = %d, want %d", got, want)
+		}
+	})
+}
+
+func TestCreateIndentOutdentHandlersNotFound(t *testing.T) {
+	db := setupTestDB(t)
+
+	srv, err := New(Config{
+		Addr: ":0",
+		DB:   db,
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+
+	testCases := []struct {
+		name string
+		path string
+	}{
+		{
+			name: "enter",
+			path: "/api/items/not-a-real-id/enter",
+		},
+		{
+			name: "indent",
+			path: "/api/items/not-a-real-id/indent",
+		},
+		{
+			name: "outdent",
+			path: "/api/items/not-a-real-id/outdent",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, tc.path, nil)
+			rec := httptest.NewRecorder()
+			srv.Handler.ServeHTTP(rec, req)
+
+			if got, want := rec.Code, http.StatusNotFound; got != want {
+				t.Fatalf("status = %d, want %d", got, want)
+			}
+		})
+	}
+}
+
+func TestMutationHandlersMissingUUID(t *testing.T) {
+	db := setupTestDB(t)
+
+	store, err := workflow.NewStore(db)
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+
+	testCases := []struct {
+		name        string
+		method      string
+		body        string
+		contentType string
+		handler     http.HandlerFunc
+	}{
+		{
+			name:        "update body",
+			method:      http.MethodPatch,
+			body:        `{"body":"updated"}`,
+			contentType: "application/json",
+			handler:     updateItemBodyAPIHandler(store),
+		},
+		{
+			name:    "delete item",
+			method:  http.MethodDelete,
+			handler: deleteItemAPIHandler(store),
+		},
+		{
+			name:        "update open state",
+			method:      http.MethodPatch,
+			body:        `{"is_open":true}`,
+			contentType: "application/json",
+			handler:     updateItemOpenStateAPIHandler(store),
+		},
+		{
+			name:        "update favorite state",
+			method:      http.MethodPatch,
+			body:        `{"is_favorite":true}`,
+			contentType: "application/json",
+			handler:     updateItemFavoriteStateAPIHandler(store),
+		},
+		{
+			name:    "create item after enter",
+			method:  http.MethodPost,
+			handler: createItemAfterEnterAPIHandler(store),
+		},
+		{
+			name:    "indent item",
+			method:  http.MethodPost,
+			handler: indentItemAPIHandler(store),
+		},
+		{
+			name:    "outdent item",
+			method:  http.MethodPost,
+			handler: outdentItemAPIHandler(store),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var bodyReader *strings.Reader
+			if tc.body == "" {
+				bodyReader = strings.NewReader("")
+			} else {
+				bodyReader = strings.NewReader(tc.body)
+			}
+
+			req := httptest.NewRequest(tc.method, "/", bodyReader)
+			if tc.contentType != "" {
+				req.Header.Set("Content-Type", tc.contentType)
+			}
+
+			rec := httptest.NewRecorder()
+			tc.handler.ServeHTTP(rec, req)
+			if got, want := rec.Code, http.StatusBadRequest; got != want {
+				t.Fatalf("status = %d, want %d", got, want)
+			}
+		})
+	}
+}
+
+func TestNewDevModeGeneratesBuildIDWhenMissing(t *testing.T) {
+	db := setupTestDB(t)
+
+	srv, err := New(Config{
+		Addr:    ":0",
+		DB:      db,
+		DevMode: true,
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/dev/build", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(rec, req)
+
+	if got, want := rec.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+
+	var response struct {
+		BuildID string `json:"build_id"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if strings.TrimSpace(response.BuildID) == "" {
+		t.Fatal("expected non-empty build_id")
+	}
+}
+
+func TestDevBuildAPIHandlerHeaders(t *testing.T) {
+	handler := devBuildAPIHandler("build-id-1")
+	req := httptest.NewRequest(http.MethodGet, "/api/dev/build", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if got, want := rec.Code, http.StatusOK; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+	if got, want := rec.Header().Get("Cache-Control"), "no-store"; got != want {
+		t.Fatalf("cache-control = %q, want %q", got, want)
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.Contains(ct, "application/json") {
+		t.Fatalf("content-type = %q, expected application/json", ct)
+	}
+}
+
+func TestInjectDevBootstrapWithoutHeadMarker(t *testing.T) {
+	input := []byte("<html><body>hello</body></html>")
+	got := injectDevBootstrap(input, "build-id")
+	if string(got) != string(input) {
+		t.Fatalf("expected unchanged html when </head> marker is missing")
 	}
 }
 
