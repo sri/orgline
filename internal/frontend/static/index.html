@@ -270,6 +270,9 @@
         border-bottom: 1px solid var(--top-bar-border);
         display: flex;
         justify-content: center;
+        position: sticky;
+        top: 0;
+        z-index: 200;
       }
 
       .top-bar-inner {
@@ -694,6 +697,9 @@
         border-radius: 8px;
         background: var(--toggle-bg);
         color: var(--toggle-text);
+        position: sticky;
+        top: calc(20px + 0.25rem);
+        z-index: 150;
       }
 
       .outline-search {
@@ -761,6 +767,13 @@
         <div class="outline-toolbar">
           <div class="top-actions" aria-label="Outline controls">
             <button
+              id="undo-btn"
+              class="top-action"
+              type="button"
+              title="Undo"
+              aria-label="Undo"
+            >↶</button>
+            <button
               id="expand-all-btn"
               class="top-action"
               type="button"
@@ -813,6 +826,7 @@
         const zoomContextEl = document.getElementById("zoom-context");
         const zoomHomeLinkEl = document.getElementById("zoom-home-link");
         const zoomParentLinkEl = document.getElementById("zoom-parent-link");
+        const undoBtnEl = document.getElementById("undo-btn");
         const expandAllBtnEl = document.getElementById("expand-all-btn");
         const expandLevelBtnEl = document.getElementById("expand-level-btn");
         const collapseAllBtnEl = document.getElementById("collapse-all-btn");
@@ -843,6 +857,9 @@
         let topActionsBusy = false;
         let lastRenderState = null;
         const enterCreatedItemUUIDs = new Set();
+        const undoStack = [];
+        const maxUndoDepth = 200;
+        let applyingUndo = false;
 
         const themes = [
           { id: "default", label: "default" },
@@ -1038,8 +1055,52 @@
           button.innerHTML = heartIconMarkup(isActive);
         }
 
+        function pushUndoAction(action) {
+          if (applyingUndo) {
+            return;
+          }
+          if (!action || typeof action.apply !== "function") {
+            return;
+          }
+          undoStack.push(action);
+          if (undoStack.length > maxUndoDepth) {
+            undoStack.shift();
+          }
+          setTopActionsState();
+        }
+
+        async function performUndo() {
+          if (topActionsBusy || undoStack.length === 0) {
+            return;
+          }
+
+          const action = undoStack.pop();
+          if (!action) {
+            setTopActionsState();
+            return;
+          }
+
+          topActionsBusy = true;
+          setTopActionsState();
+          applyingUndo = true;
+          try {
+            await action.apply();
+            await loadOutline(action.focusUUID || "");
+            clearError();
+          } catch (error) {
+            showError(`Unable to undo: ${String(error)}`);
+          } finally {
+            applyingUndo = false;
+            topActionsBusy = false;
+            setTopActionsState();
+          }
+        }
+
         function setTopActionsState() {
           const treeActionsDisabled = topActionsBusy || searchModeActive || !lastRenderState;
+          if (undoBtnEl instanceof HTMLButtonElement) {
+            undoBtnEl.disabled = topActionsBusy || undoStack.length === 0;
+          }
           if (treeActionsDisabled) {
             if (expandAllBtnEl instanceof HTMLButtonElement) {
               expandAllBtnEl.disabled = true;
@@ -1635,6 +1696,15 @@
           for (const uuid of moveTargets) {
             await moveAction(uuid);
           }
+          if (!applyingUndo && moveTargets.length === 1) {
+            const movedUUID = moveTargets[0];
+            pushUndoAction({
+              focusUUID: movedUUID,
+              apply: async () => {
+                await (isOutdent ? indentItem : outdentItem)(movedUUID);
+              }
+            });
+          }
 
           await loadOutline(focusUUID);
         }
@@ -1671,7 +1741,6 @@
           }
 
           await saveItemBody(uuid, currentBody);
-          item.body = currentBody;
           markItemDirty(uuid, false);
           clearError();
           return true;
@@ -1710,25 +1779,44 @@
         }
 
         async function saveItemBody(uuid, body) {
+          const liveItem = findItemByUUID(outlineItems, uuid);
+          const previousBody = liveItem ? liveItem.body : null;
+          if (previousBody !== null && previousBody === body) {
+            return;
+          }
+
           pendingBodySaveCount += 1;
           try {
             if (localMode) {
               const { item } = requireItemLocation(uuid);
               item.body = body;
               item.updated_at = nowTimestamp();
-              return;
+            } else {
+              const response = await fetch(`/api/items/${encodeURIComponent(uuid)}`, {
+                method: "PATCH",
+                headers: {
+                  "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ body })
+              });
+
+              if (!response.ok) {
+                throw new Error(`save failed with status ${response.status}`);
+              }
             }
 
-            const response = await fetch(`/api/items/${encodeURIComponent(uuid)}`, {
-              method: "PATCH",
-              headers: {
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({ body })
-            });
+            if (liveItem) {
+              liveItem.body = body;
+              liveItem.updated_at = nowTimestamp();
+            }
 
-            if (!response.ok) {
-              throw new Error(`save failed with status ${response.status}`);
+            if (previousBody !== null && !applyingUndo) {
+              pushUndoAction({
+                focusUUID: uuid,
+                apply: async () => {
+                  await saveItemBody(uuid, previousBody);
+                }
+              });
             }
           } finally {
             pendingBodySaveCount = Math.max(0, pendingBodySaveCount - 1);
@@ -2014,6 +2102,12 @@
                   ? await createChildItem(item.uuid)
                   : await createItemAfterEnter(item.uuid);
                 enterCreatedItemUUIDs.add(created.uuid);
+                pushUndoAction({
+                  focusUUID: item.uuid,
+                  apply: async () => {
+                    await deleteItem(created.uuid);
+                  }
+                });
                 if (renderContext.searchActive && searchInputEl instanceof HTMLInputElement) {
                   if (preSearchOpenState instanceof Map) {
                     let cursorUUID = item.uuid;
@@ -2249,6 +2343,7 @@
               body.textContent = currentBody;
               markItemDirty(item.uuid, currentBody !== savedBody);
               const moveAction = event.shiftKey ? outdentItem : indentItem;
+              const undoMoveAction = event.shiftKey ? indentItem : outdentItem;
 
               const saveAndMove = async () => {
                 try {
@@ -2274,6 +2369,12 @@
                   }
 
                   await moveAction(item.uuid);
+                  pushUndoAction({
+                    focusUUID: item.uuid,
+                    apply: async () => {
+                      await undoMoveAction(item.uuid);
+                    }
+                  });
                   await loadOutline(item.uuid);
                 } catch (error) {
                   showError(`Unable to move item: ${String(error)}`);
@@ -2447,6 +2548,12 @@
               void (async () => {
                 try {
                   await saveItemFavoriteState(item.uuid, nextIsFavorite);
+                  pushUndoAction({
+                    focusUUID: item.uuid,
+                    apply: async () => {
+                      await saveItemFavoriteState(item.uuid, previousIsFavorite);
+                    }
+                  });
                   clearError();
                 } catch (error) {
                   item.is_favorite = previousIsFavorite;
@@ -2518,6 +2625,12 @@
                     return;
                   }
                   await outdentItem(item.uuid);
+                  pushUndoAction({
+                    focusUUID: item.uuid,
+                    apply: async () => {
+                      await indentItem(item.uuid);
+                    }
+                  });
                   await loadOutline(item.uuid);
                   clearError();
                 } catch (error) {
@@ -2553,6 +2666,12 @@
                     return;
                   }
                   await indentItem(item.uuid);
+                  pushUndoAction({
+                    focusUUID: item.uuid,
+                    apply: async () => {
+                      await outdentItem(item.uuid);
+                    }
+                  });
                   await loadOutline(item.uuid);
                   clearError();
                 } catch (error) {
@@ -2619,6 +2738,12 @@
                   try {
                     await saveItemOpenState(item.uuid, nextIsOpen);
                     item.is_open = nextIsOpen;
+                    pushUndoAction({
+                      focusUUID: item.uuid,
+                      apply: async () => {
+                        await saveItemOpenState(item.uuid, !nextIsOpen);
+                      }
+                    });
                   } catch (error) {
                     children.hidden = prevHidden;
                     const revertedIsOpen = !prevHidden;
@@ -2659,6 +2784,12 @@
             void (async () => {
               try {
                 const created = await createRootItem();
+                pushUndoAction({
+                  focusUUID: "",
+                  apply: async () => {
+                    await deleteItem(created.uuid);
+                  }
+                });
                 if (searchInputEl instanceof HTMLInputElement) {
                   if (searchInputDebounceID !== 0) {
                     window.clearTimeout(searchInputDebounceID);
@@ -2899,6 +3030,12 @@
         }
 
         function initTopActions() {
+          if (undoBtnEl instanceof HTMLButtonElement) {
+            undoBtnEl.addEventListener("click", () => {
+              void performUndo();
+            });
+          }
+
           if (expandAllBtnEl instanceof HTMLButtonElement) {
             expandAllBtnEl.addEventListener("click", () => {
               if (topActionsBusy || searchModeActive) {
@@ -2993,6 +3130,19 @@
         }
 
         document.addEventListener("keydown", (event) => {
+          if (
+            (event.metaKey || event.ctrlKey) &&
+            !event.altKey &&
+            !event.shiftKey &&
+            event.key.toLocaleLowerCase() === "z"
+          ) {
+            if (!isEditableEventTarget(event.target)) {
+              event.preventDefault();
+              void performUndo();
+            }
+            return;
+          }
+
           if (event.defaultPrevented) {
             return;
           }
