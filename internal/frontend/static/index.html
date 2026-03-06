@@ -429,6 +429,45 @@
         -webkit-user-select: none;
       }
 
+      .item-move-actions {
+        display: none;
+        align-items: stretch;
+        border-left: 1px solid var(--controls-divider);
+      }
+
+      .item-move-btn {
+        width: 1rem;
+        display: inline-grid;
+        place-items: center;
+        padding: 0;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+        color: var(--toggle-text);
+        font-size: 0.6rem;
+        cursor: pointer;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+
+      .item-move-btn + .item-move-btn {
+        border-left: 1px solid var(--controls-divider);
+      }
+
+      .item-move-btn:hover {
+        background: var(--controls-segment-hover);
+      }
+
+      .item-move-btn:focus-visible {
+        outline: 1px solid var(--toggle-focus);
+        outline-offset: 1px;
+      }
+
+      .item-move-btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
       .item-tool-trigger:hover {
         background: var(--controls-segment-hover);
       }
@@ -605,6 +644,12 @@
 
       .item-row.is-selected .item-toggle {
         border-left-color: var(--controls-divider);
+      }
+
+      @media (hover: none) and (pointer: coarse) {
+        .item-row.is-selected .item-move-actions {
+          display: inline-flex;
+        }
       }
 
       .error {
@@ -1594,6 +1639,44 @@
           await loadOutline(focusUUID);
         }
 
+        async function saveRenderedBodyIfDirty(uuid) {
+          if (!rootEl || uuid === "") {
+            return true;
+          }
+
+          const bodyEl = rootEl.querySelector(`.item-body[data-uuid="${escapeSelectorValue(uuid)}"]`);
+          if (!(bodyEl instanceof HTMLElement)) {
+            return true;
+          }
+
+          const item = findItemByUUID(outlineItems, uuid);
+          if (!item) {
+            return true;
+          }
+
+          const currentBody = (bodyEl.textContent ?? "").trim();
+          bodyEl.contentEditable = "false";
+          bodyEl.classList.remove("editing");
+
+          if (currentBody === item.body) {
+            markItemDirty(uuid, false);
+            return true;
+          }
+
+          if (currentBody === "") {
+            bodyEl.textContent = item.body;
+            markItemDirty(uuid, false);
+            showError("Item body cannot be empty.");
+            return false;
+          }
+
+          await saveItemBody(uuid, currentBody);
+          item.body = currentBody;
+          markItemDirty(uuid, false);
+          clearError();
+          return true;
+        }
+
         function placeCaretAtEnd(el) {
           const selection = window.getSelection();
           if (!selection) {
@@ -2323,6 +2406,13 @@
             const controls = document.createElement("div");
             controls.className = "item-controls";
 
+            const isFavoriteRoot = favoriteRootIDs.has(item.uuid);
+            const location = findItemLocation(outlineItems, item.uuid);
+            const canIndentByStructure = !!location && location.index > 0;
+            const canOutdentByStructure = !!location && location.parentItem !== null;
+            const canIndentInView = canIndentByStructure && (!renderContext.favoriteFilterActive || !isFavoriteRoot);
+            const canOutdentInView = canOutdentByStructure && !renderContext.favoriteFilterActive;
+
             const toolTrigger = document.createElement("button");
             toolTrigger.type = "button";
             toolTrigger.className = "item-tool-trigger";
@@ -2401,6 +2491,81 @@
             toggle.type = "button";
             toggle.className = "item-toggle";
 
+            const moveActions = document.createElement("div");
+            moveActions.className = "item-move-actions";
+
+            const outdentBtn = document.createElement("button");
+            outdentBtn.type = "button";
+            outdentBtn.className = "item-move-btn";
+            outdentBtn.textContent = "←";
+            outdentBtn.disabled = !canOutdentInView;
+            outdentBtn.setAttribute("title", "Outdent item");
+            outdentBtn.setAttribute("aria-label", "Outdent item");
+            outdentBtn.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (!canOutdentInView || topActionsBusy) {
+                return;
+              }
+              setSelectedItem(item.uuid);
+              closeAllToolMenus();
+              topActionsBusy = true;
+              setTopActionsState();
+              void (async () => {
+                try {
+                  const canContinue = await saveRenderedBodyIfDirty(item.uuid);
+                  if (!canContinue) {
+                    return;
+                  }
+                  await outdentItem(item.uuid);
+                  await loadOutline(item.uuid);
+                  clearError();
+                } catch (error) {
+                  showError(`Unable to move item: ${String(error)}`);
+                } finally {
+                  topActionsBusy = false;
+                  setTopActionsState();
+                }
+              })();
+            });
+
+            const indentBtn = document.createElement("button");
+            indentBtn.type = "button";
+            indentBtn.className = "item-move-btn";
+            indentBtn.textContent = "→";
+            indentBtn.disabled = !canIndentInView;
+            indentBtn.setAttribute("title", "Indent item");
+            indentBtn.setAttribute("aria-label", "Indent item");
+            indentBtn.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (!canIndentInView || topActionsBusy) {
+                return;
+              }
+              setSelectedItem(item.uuid);
+              closeAllToolMenus();
+              topActionsBusy = true;
+              setTopActionsState();
+              void (async () => {
+                try {
+                  const canContinue = await saveRenderedBodyIfDirty(item.uuid);
+                  if (!canContinue) {
+                    return;
+                  }
+                  await indentItem(item.uuid);
+                  await loadOutline(item.uuid);
+                  clearError();
+                } catch (error) {
+                  showError(`Unable to move item: ${String(error)}`);
+                } finally {
+                  topActionsBusy = false;
+                  setTopActionsState();
+                }
+              })();
+            });
+            moveActions.appendChild(outdentBtn);
+            moveActions.appendChild(indentBtn);
+
             const hasChildren = childItems.length > 0;
             if (!hasChildren) {
               controls.classList.add("is-leaf");
@@ -2412,6 +2577,7 @@
             }
 
             controls.appendChild(toggle);
+            controls.appendChild(moveActions);
             controls.appendChild(toolTrigger);
             controls.appendChild(toolMenu);
 
