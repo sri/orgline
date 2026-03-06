@@ -1035,7 +1035,7 @@
             const hasTreeItems = treeItems.length > 0;
             const hasFavoriteItems = treeItems.some((item) => item.is_favorite === true);
 
-            favoriteItemBtnEl.disabled = topActionsBusy || !hasTreeItems || (!favoriteFilterActive && !hasFavoriteItems);
+            favoriteItemBtnEl.disabled = topActionsBusy || (!favoriteFilterActive && (!hasTreeItems || !hasFavoriteItems));
             favoriteItemBtnEl.classList.toggle("is-active", favoriteFilterActive);
             favoriteItemBtnEl.classList.toggle("is-favorite-active", favoriteFilterActive);
             setHeartIcon(favoriteItemBtnEl, favoriteFilterActive);
@@ -1369,6 +1369,16 @@
           for (const item of items) {
             out.push(item);
             collectTreeItems(item.children, out);
+          }
+          return out;
+        }
+
+        function collectFavoriteViewRoots(items, out = []) {
+          for (const item of items) {
+            if (item.is_favorite === true) {
+              out.push(item);
+            }
+            collectFavoriteViewRoots(item.children, out);
           }
           return out;
         }
@@ -1921,13 +1931,6 @@
                   ? await createChildItem(item.uuid)
                   : await createItemAfterEnter(item.uuid);
                 enterCreatedItemUUIDs.add(created.uuid);
-                if (favoriteFilterActive) {
-                  await saveItemFavoriteState(created.uuid, true);
-                  const createdItem = findItemByUUID(outlineItems, created.uuid);
-                  if (createdItem) {
-                    createdItem.is_favorite = true;
-                  }
-                }
                 if (renderContext.searchActive && searchInputEl instanceof HTMLInputElement) {
                   if (preSearchOpenState instanceof Map) {
                     let cursorUUID = item.uuid;
@@ -2072,6 +2075,9 @@
               !event.metaKey
             ) {
               event.preventDefault();
+              if (renderContext.favoriteFilterActive) {
+                return;
+              }
               body.contentEditable = "false";
               body.classList.remove("editing");
 
@@ -2146,6 +2152,13 @@
 
             if (event.key === "Tab") {
               event.preventDefault();
+              const favoriteRootIDs = renderContext.favoriteRootIDs instanceof Set
+                ? renderContext.favoriteRootIDs
+                : new Set();
+              const isFavoriteRoot = favoriteRootIDs.has(item.uuid);
+              if (renderContext.favoriteFilterActive && (event.shiftKey || isFavoriteRoot)) {
+                return;
+              }
               body.contentEditable = "false";
               body.classList.remove("editing");
 
@@ -2264,19 +2277,18 @@
               continue;
             }
 
-            const childItems = renderContext.searchActive
-              ? item.children.filter((child) => renderContext.searchView.visibleIDs.has(child.uuid))
-              : item.children;
-
-            if (renderContext.favoriteFilterActive && item.is_favorite !== true) {
-              if (childItems.length > 0) {
-                const promotedChildren = renderTree(childItems, renderContext);
-                for (const childNode of Array.from(promotedChildren.children)) {
-                  list.appendChild(childNode);
-                }
+            const favoriteRootIDs = renderContext.favoriteRootIDs instanceof Set
+              ? renderContext.favoriteRootIDs
+              : new Set();
+            const childItems = item.children.filter((child) => {
+              if (renderContext.searchActive && !renderContext.searchView.visibleIDs.has(child.uuid)) {
+                return false;
               }
-              continue;
-            }
+              if (renderContext.favoriteFilterActive && favoriteRootIDs.has(child.uuid)) {
+                return false;
+              }
+              return true;
+            });
 
             const listItem = document.createElement("li");
             const row = document.createElement("div");
@@ -2481,9 +2493,6 @@
             void (async () => {
               try {
                 const created = await createRootItem();
-                if (favoriteFilterActive) {
-                  await saveItemFavoriteState(created.uuid, true);
-                }
                 if (searchInputEl instanceof HTMLInputElement) {
                   if (searchInputDebounceID !== 0) {
                     window.clearTimeout(searchInputDebounceID);
@@ -2504,6 +2513,31 @@
 
           empty.appendChild(message);
           empty.appendChild(createButton);
+          return empty;
+        }
+
+        function renderFavoritesEmptyState() {
+          const empty = document.createElement("div");
+          empty.className = "outline-empty";
+
+          const message = document.createElement("span");
+          message.textContent = "No favorites.";
+          empty.appendChild(message);
+
+          const showAllButton = document.createElement("button");
+          showAllButton.type = "button";
+          showAllButton.className = "outline-empty-create";
+          showAllButton.textContent = "Show all items";
+          showAllButton.setAttribute("aria-label", "Show all items");
+          showAllButton.addEventListener("click", () => {
+            if (topActionsBusy) {
+              return;
+            }
+            favoriteFilterActive = false;
+            renderOutline();
+          });
+          empty.appendChild(showAllButton);
+
           return empty;
         }
 
@@ -2551,34 +2585,50 @@
             }
           }
 
+          const favoriteViewRoots = favoriteFilterActive ? collectFavoriteViewRoots(baseItems, []) : [];
+          const favoriteRootIDs = new Set(favoriteViewRoots.map((item) => item.uuid));
+          const renderItems = favoriteFilterActive ? favoriteViewRoots : baseItems;
+
           const query = activeSearchQuery();
           const nextSearchModeActive = shouldActivateSearch(query);
 
           if (nextSearchModeActive && !searchModeActive) {
-            preSearchOpenState = collectOpenState(baseItems);
+            preSearchOpenState = collectOpenState(renderItems);
             searchModeActive = true;
           } else if (!nextSearchModeActive && searchModeActive) {
-            applyOpenState(baseItems, preSearchOpenState);
+            applyOpenState(renderItems, preSearchOpenState);
             preSearchOpenState = null;
             searchModeActive = false;
           }
 
           const searchView = searchModeActive
-            ? collectSearchView(baseItems, query)
+            ? collectSearchView(renderItems, query)
             : { visibleIDs: new Set(), matchedIDs: new Set(), forcedOpenIDs: new Set() };
 
           lastRenderState = {
-            baseItems,
+            baseItems: renderItems,
             searchActive: searchModeActive,
             searchView,
-            favoriteFilterActive
+            favoriteFilterActive,
+            favoriteRootIDs
           };
 
-          rootEl.replaceChildren(renderTree(baseItems, {
+          if (favoriteFilterActive && renderItems.length === 0) {
+            rootEl.replaceChildren(renderFavoritesEmptyState());
+            applySelectedItemUI();
+            setZoomContextVisible(false, "");
+            closeAllToolMenus();
+            setTopActionsState();
+            clearError();
+            return;
+          }
+
+          rootEl.replaceChildren(renderTree(renderItems, {
             searchActive: searchModeActive,
             query,
             searchView,
-            favoriteFilterActive
+            favoriteFilterActive,
+            favoriteRootIDs
           }));
           applySelectedItemUI();
 
@@ -2796,6 +2846,9 @@
           }
 
           event.preventDefault();
+          if (event.key === "Tab" && favoriteFilterActive) {
+            return;
+          }
           if (topActionsBusy) {
             return;
           }
