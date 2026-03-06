@@ -432,20 +432,14 @@
         -webkit-user-select: none;
       }
 
-      .item-move-actions {
+      .item-mobile-move {
         display: none;
-        align-items: stretch;
-        border-left: 1px solid var(--controls-divider);
-      }
-
-      .item-move-btn {
         width: 1rem;
-        display: inline-grid;
+        align-self: stretch;
         place-items: center;
         padding: 0;
         border: none;
-        border-radius: 0;
-        background: transparent;
+        background: var(--toggle-bg);
         color: var(--toggle-text);
         font-size: 0.6rem;
         cursor: pointer;
@@ -453,20 +447,26 @@
         -webkit-user-select: none;
       }
 
-      .item-move-btn + .item-move-btn {
+      .item-mobile-move.is-outdent {
+        border-radius: 6px 0 0 6px;
+        border-right: 1px solid var(--controls-divider);
+      }
+
+      .item-mobile-move.is-indent {
+        border-radius: 0 6px 6px 0;
         border-left: 1px solid var(--controls-divider);
       }
 
-      .item-move-btn:hover {
+      .item-mobile-move:hover {
         background: var(--controls-segment-hover);
       }
 
-      .item-move-btn:focus-visible {
+      .item-mobile-move:focus-visible {
         outline: 1px solid var(--toggle-focus);
         outline-offset: 1px;
       }
 
-      .item-move-btn:disabled {
+      .item-mobile-move:disabled {
         opacity: 0.45;
         cursor: not-allowed;
       }
@@ -650,8 +650,8 @@
       }
 
       @media (hover: none) and (pointer: coarse) {
-        .item-row.is-selected .item-move-actions {
-          display: inline-flex;
+        .item-row.is-selected .item-mobile-move {
+          display: inline-grid;
         }
       }
 
@@ -2488,6 +2488,9 @@
               if (event.target.closest(".item-controls")) {
                 return;
               }
+              if (event.target.closest(".item-mobile-move")) {
+                return;
+              }
               if (event.target.closest(".item-body.editing")) {
                 return;
               }
@@ -2598,12 +2601,41 @@
             toggle.type = "button";
             toggle.className = "item-toggle";
 
-            const moveActions = document.createElement("div");
-            moveActions.className = "item-move-actions";
+            function moveSingleItem(moveAction, undoMoveAction) {
+              if (topActionsBusy) {
+                return;
+              }
+              setSelectedItem(item.uuid);
+              closeAllToolMenus();
+              topActionsBusy = true;
+              setTopActionsState();
+              void (async () => {
+                try {
+                  const canContinue = await saveRenderedBodyIfDirty(item.uuid);
+                  if (!canContinue) {
+                    return;
+                  }
+                  await moveAction(item.uuid);
+                  pushUndoAction({
+                    focusUUID: item.uuid,
+                    apply: async () => {
+                      await undoMoveAction(item.uuid);
+                    }
+                  });
+                  await loadOutline(item.uuid);
+                  clearError();
+                } catch (error) {
+                  showError(`Unable to move item: ${String(error)}`);
+                } finally {
+                  topActionsBusy = false;
+                  setTopActionsState();
+                }
+              })();
+            }
 
             const outdentBtn = document.createElement("button");
             outdentBtn.type = "button";
-            outdentBtn.className = "item-move-btn";
+            outdentBtn.className = "item-mobile-move is-outdent";
             outdentBtn.textContent = "←";
             outdentBtn.disabled = !canOutdentInView;
             outdentBtn.setAttribute("title", "Outdent item");
@@ -2611,40 +2643,15 @@
             outdentBtn.addEventListener("click", (event) => {
               event.preventDefault();
               event.stopPropagation();
-              if (!canOutdentInView || topActionsBusy) {
+              if (!canOutdentInView) {
                 return;
               }
-              setSelectedItem(item.uuid);
-              closeAllToolMenus();
-              topActionsBusy = true;
-              setTopActionsState();
-              void (async () => {
-                try {
-                  const canContinue = await saveRenderedBodyIfDirty(item.uuid);
-                  if (!canContinue) {
-                    return;
-                  }
-                  await outdentItem(item.uuid);
-                  pushUndoAction({
-                    focusUUID: item.uuid,
-                    apply: async () => {
-                      await indentItem(item.uuid);
-                    }
-                  });
-                  await loadOutline(item.uuid);
-                  clearError();
-                } catch (error) {
-                  showError(`Unable to move item: ${String(error)}`);
-                } finally {
-                  topActionsBusy = false;
-                  setTopActionsState();
-                }
-              })();
+              moveSingleItem(outdentItem, indentItem);
             });
 
             const indentBtn = document.createElement("button");
             indentBtn.type = "button";
-            indentBtn.className = "item-move-btn";
+            indentBtn.className = "item-mobile-move is-indent";
             indentBtn.textContent = "→";
             indentBtn.disabled = !canIndentInView;
             indentBtn.setAttribute("title", "Indent item");
@@ -2652,38 +2659,11 @@
             indentBtn.addEventListener("click", (event) => {
               event.preventDefault();
               event.stopPropagation();
-              if (!canIndentInView || topActionsBusy) {
+              if (!canIndentInView) {
                 return;
               }
-              setSelectedItem(item.uuid);
-              closeAllToolMenus();
-              topActionsBusy = true;
-              setTopActionsState();
-              void (async () => {
-                try {
-                  const canContinue = await saveRenderedBodyIfDirty(item.uuid);
-                  if (!canContinue) {
-                    return;
-                  }
-                  await indentItem(item.uuid);
-                  pushUndoAction({
-                    focusUUID: item.uuid,
-                    apply: async () => {
-                      await outdentItem(item.uuid);
-                    }
-                  });
-                  await loadOutline(item.uuid);
-                  clearError();
-                } catch (error) {
-                  showError(`Unable to move item: ${String(error)}`);
-                } finally {
-                  topActionsBusy = false;
-                  setTopActionsState();
-                }
-              })();
+              moveSingleItem(indentItem, outdentItem);
             });
-            moveActions.appendChild(outdentBtn);
-            moveActions.appendChild(indentBtn);
 
             const hasChildren = childItems.length > 0;
             if (!hasChildren) {
@@ -2696,12 +2676,14 @@
             }
 
             controls.appendChild(toggle);
-            controls.appendChild(moveActions);
             controls.appendChild(toolTrigger);
             controls.appendChild(toolMenu);
 
+            const bodyNode = renderBody(item, renderContext);
+            row.appendChild(outdentBtn);
             row.appendChild(controls);
-            row.appendChild(renderBody(item, renderContext));
+            row.appendChild(bodyNode);
+            row.appendChild(indentBtn);
             listItem.appendChild(row);
 
             if (hasChildren) {
