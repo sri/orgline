@@ -59,6 +59,7 @@ func New(cfg Config) (*http.Server, error) {
 	mux.HandleFunc("POST /api/items/{uuid}/enter", createItemAfterEnterAPIHandler(workflowStore))
 	mux.HandleFunc("POST /api/items/{uuid}/indent", indentItemAPIHandler(workflowStore))
 	mux.HandleFunc("POST /api/items/{uuid}/outdent", outdentItemAPIHandler(workflowStore))
+	mux.HandleFunc("POST /api/items/{uuid}/move", moveItemAPIHandler(workflowStore))
 	if cfg.DevMode {
 		mux.HandleFunc("GET /api/dev/build", devBuildAPIHandler(cfg.DevBuildID))
 	}
@@ -371,6 +372,57 @@ func outdentItemAPIHandler(store *workflow.Store) http.HandlerFunc {
 				return
 			}
 			http.Error(w, "outdent item", http.StatusInternalServerError)
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func moveItemAPIHandler(store *workflow.Store) http.HandlerFunc {
+	type request struct {
+		ParentUUID *string `json:"parent_uuid"`
+		ChildOrder int64   `json:"child_order"`
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+		uuid := r.PathValue("uuid")
+		if uuid == "" {
+			http.Error(w, "missing uuid", http.StatusBadRequest)
+			return
+		}
+
+		var payload request
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&payload); err != nil {
+			http.Error(w, "invalid json body", http.StatusBadRequest)
+			return
+		}
+		if payload.ChildOrder < 1 {
+			http.Error(w, "child_order must be >= 1", http.StatusBadRequest)
+			return
+		}
+
+		var parentUUID *string
+		if payload.ParentUUID != nil {
+			trimmed := strings.TrimSpace(*payload.ParentUUID)
+			if trimmed != "" {
+				parentUUID = &trimmed
+			}
+		}
+
+		err := store.MoveItem(r.Context(), uuid, parentUUID, payload.ChildOrder)
+		if err != nil {
+			if errors.Is(err, workflow.ErrItemNotFound) {
+				http.NotFound(w, r)
+				return
+			}
+			if errors.Is(err, workflow.ErrInvalidMove) {
+				http.Error(w, "invalid move", http.StatusBadRequest)
+				return
+			}
+			http.Error(w, "move item", http.StatusInternalServerError)
 			return
 		}
 

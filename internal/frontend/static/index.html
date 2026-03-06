@@ -448,8 +448,7 @@
       }
 
       .item-mobile-move.is-outdent {
-        border-radius: 6px 0 0 6px;
-        border-right: 1px solid var(--controls-divider);
+        border-left: 1px solid var(--controls-divider);
       }
 
       .item-mobile-move.is-indent {
@@ -590,7 +589,7 @@
       .item-body {
         display: inline-block;
         padding: 0.15rem 0.45rem;
-        border-radius: 0 6px 6px 0;
+        border-radius: 0;
         background: transparent;
         border: none;
         min-width: 1rem;
@@ -649,10 +648,8 @@
         border-left-color: var(--controls-divider);
       }
 
-      @media (hover: none) and (pointer: coarse) {
-        .item-row.is-selected .item-mobile-move {
-          display: inline-grid;
-        }
+      .item-row.is-selected .item-mobile-move {
+        display: inline-grid;
       }
 
       .error {
@@ -2696,9 +2693,9 @@
             controls.appendChild(toolMenu);
 
             const bodyNode = renderBody(item, renderContext);
-            row.appendChild(outdentBtn);
             row.appendChild(controls);
             row.appendChild(bodyNode);
+            row.appendChild(outdentBtn);
             row.appendChild(indentBtn);
             listItem.appendChild(row);
 

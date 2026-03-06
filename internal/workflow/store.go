@@ -10,6 +10,7 @@ import (
 
 var ErrItemNotFound = errors.New("workflow item not found")
 var ErrCannotDeleteLastItem = errors.New("cannot delete last workflow item")
+var ErrInvalidMove = errors.New("invalid workflow item move")
 
 type Store struct {
 	db *sql.DB
@@ -600,6 +601,162 @@ func (s *Store) OutdentItem(ctx context.Context, uuid string) (bool, error) {
 	}
 
 	return true, nil
+}
+
+func (s *Store) MoveItem(ctx context.Context, uuid string, parentUUID *string, childOrder int64) error {
+	if childOrder < 1 {
+		return ErrInvalidMove
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin move transaction: %w", err)
+	}
+
+	currentParent, currentOrder, err := getCurrentItemPosition(ctx, tx, uuid)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	targetParent := sql.NullString{}
+	if parentUUID != nil {
+		if *parentUUID == uuid {
+			_ = tx.Rollback()
+			return ErrInvalidMove
+		}
+		if _, _, err := getCurrentItemPosition(ctx, tx, *parentUUID); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+
+		descendant, err := isAncestor(ctx, tx, uuid, *parentUUID)
+		if err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+		if descendant {
+			_ = tx.Rollback()
+			return ErrInvalidMove
+		}
+
+		targetParent = sql.NullString{String: *parentUUID, Valid: true}
+	}
+
+	siblingCount, err := siblingCountForParent(ctx, tx, targetParent, uuid)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	targetOrder := childOrder
+	if targetOrder > siblingCount+1 {
+		targetOrder = siblingCount + 1
+	}
+
+	sameParent := sameNullString(currentParent, targetParent)
+	if sameParent && targetOrder > currentOrder {
+		targetOrder--
+	}
+	if sameParent && targetOrder == currentOrder {
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit move no-op transaction: %w", err)
+		}
+		return nil
+	}
+
+	if err := shiftAfterRemoval(ctx, tx, currentParent, currentOrder); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if err := shiftAtInsertion(ctx, tx, targetParent, targetOrder); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	var parentValue any
+	if targetParent.Valid {
+		parentValue = targetParent.String
+	} else {
+		parentValue = nil
+	}
+
+	if _, err := tx.ExecContext(
+		ctx,
+		"UPDATE workflow_items SET parent_uuid = ?, child_order = ?, updated_at = CURRENT_TIMESTAMP WHERE uuid = ?",
+		parentValue,
+		targetOrder,
+		uuid,
+	); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("move item %q: %w", uuid, err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit move transaction: %w", err)
+	}
+
+	return nil
+}
+
+func isAncestor(ctx context.Context, tx *sql.Tx, ancestorUUID string, descendantUUID string) (bool, error) {
+	current := descendantUUID
+	for current != "" {
+		parent, _, err := getCurrentItemPosition(ctx, tx, current)
+		if err != nil {
+			return false, err
+		}
+		if !parent.Valid {
+			return false, nil
+		}
+		if parent.String == ancestorUUID {
+			return true, nil
+		}
+		current = parent.String
+	}
+
+	return false, nil
+}
+
+func siblingCountForParent(ctx context.Context, tx *sql.Tx, parent sql.NullString, excludeUUID string) (int64, error) {
+	var (
+		query string
+		args  []any
+	)
+
+	if parent.Valid {
+		query = `
+SELECT COUNT(*)
+FROM workflow_items
+WHERE parent_uuid = ? AND uuid <> ?
+`
+		args = []any{parent.String, excludeUUID}
+	} else {
+		query = `
+SELECT COUNT(*)
+FROM workflow_items
+WHERE parent_uuid IS NULL AND uuid <> ?
+`
+		args = []any{excludeUUID}
+	}
+
+	var count int64
+	if err := tx.QueryRowContext(ctx, query, args...).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count siblings for move: %w", err)
+	}
+
+	return count, nil
+}
+
+func sameNullString(left sql.NullString, right sql.NullString) bool {
+	if left.Valid != right.Valid {
+		return false
+	}
+	if !left.Valid {
+		return true
+	}
+
+	return left.String == right.String
 }
 
 func previousSiblingUUID(
