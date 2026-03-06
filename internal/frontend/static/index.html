@@ -797,6 +797,7 @@
         let favoriteFilterActive = false;
         let topActionsBusy = false;
         let lastRenderState = null;
+        const enterCreatedItemUUIDs = new Set();
 
         const themes = [
           { id: "default", label: "default" },
@@ -1912,10 +1913,14 @@
                   }
                 }
 
-                const createAsChild = renderContext.searchActive || renderContext.favoriteFilterActive;
+                const filteredModeActive = renderContext.searchActive || renderContext.favoriteFilterActive;
+                const liveItem = findItemByUUID(outlineItems, item.uuid);
+                const hasChildren = (liveItem ? liveItem.children : item.children).length > 0;
+                const createAsChild = filteredModeActive && !hasChildren && !enterCreatedItemUUIDs.has(item.uuid);
                 const created = createAsChild
                   ? await createChildItem(item.uuid)
                   : await createItemAfterEnter(item.uuid);
+                enterCreatedItemUUIDs.add(created.uuid);
                 if (favoriteFilterActive) {
                   await saveItemFavoriteState(created.uuid, true);
                   const createdItem = findItemByUUID(outlineItems, created.uuid);
