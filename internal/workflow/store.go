@@ -9,6 +9,7 @@ import (
 )
 
 var ErrItemNotFound = errors.New("workflow item not found")
+var ErrCannotDeleteLastItem = errors.New("cannot delete last workflow item")
 
 type Store struct {
 	db *sql.DB
@@ -199,6 +200,16 @@ func (s *Store) DeleteItem(ctx context.Context, uuid string) error {
 		return err
 	}
 
+	totalItems, err := workflowItemCount(ctx, tx)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if totalItems <= 1 {
+		_ = tx.Rollback()
+		return ErrCannotDeleteLastItem
+	}
+
 	result, err := tx.ExecContext(ctx, "DELETE FROM workflow_items WHERE uuid = ?", uuid)
 	if err != nil {
 		_ = tx.Rollback()
@@ -282,6 +293,82 @@ func (s *Store) CreateAfterEnter(ctx context.Context, currentUUID string) (strin
 
 	if err := tx.Commit(); err != nil {
 		return "", fmt.Errorf("commit create-after-enter transaction: %w", err)
+	}
+
+	return newUUID, nil
+}
+
+func (s *Store) CreateRoot(ctx context.Context) (string, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", fmt.Errorf("begin create-root transaction: %w", err)
+	}
+
+	maxOrder, err := maxRootOrder(ctx, tx)
+	if err != nil {
+		_ = tx.Rollback()
+		return "", err
+	}
+
+	newUUID, err := generateUUIDv4()
+	if err != nil {
+		_ = tx.Rollback()
+		return "", err
+	}
+
+	if err := insertWorkflowItem(ctx, tx, newUUID, sql.NullString{}, maxOrder+1); err != nil {
+		_ = tx.Rollback()
+		return "", err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return "", fmt.Errorf("commit create-root transaction: %w", err)
+	}
+
+	return newUUID, nil
+}
+
+func (s *Store) CreateChild(ctx context.Context, parentUUID string) (string, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", fmt.Errorf("begin create-child transaction: %w", err)
+	}
+
+	if _, _, err := getCurrentItemPosition(ctx, tx, parentUUID); err != nil {
+		_ = tx.Rollback()
+		return "", err
+	}
+
+	targetParent := sql.NullString{String: parentUUID, Valid: true}
+	targetOrder := int64(1)
+
+	if err := shiftChildrenOrder(ctx, tx, targetParent, targetOrder); err != nil {
+		_ = tx.Rollback()
+		return "", err
+	}
+
+	if _, err := tx.ExecContext(
+		ctx,
+		"UPDATE workflow_items SET is_open = 1, updated_at = CURRENT_TIMESTAMP WHERE uuid = ?",
+		parentUUID,
+	); err != nil {
+		_ = tx.Rollback()
+		return "", fmt.Errorf("open parent item %q: %w", parentUUID, err)
+	}
+
+	newUUID, err := generateUUIDv4()
+	if err != nil {
+		_ = tx.Rollback()
+		return "", err
+	}
+
+	if err := insertWorkflowItem(ctx, tx, newUUID, targetParent, targetOrder); err != nil {
+		_ = tx.Rollback()
+		return "", err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return "", fmt.Errorf("commit create-child transaction: %w", err)
 	}
 
 	return newUUID, nil
@@ -623,4 +710,24 @@ func maxChildOrder(ctx context.Context, tx *sql.Tx, parentUUID string) (int64, e
 	}
 
 	return maxOrder, nil
+}
+
+func maxRootOrder(ctx context.Context, tx *sql.Tx) (int64, error) {
+	var maxOrder int64
+	if err := tx.QueryRowContext(
+		ctx,
+		"SELECT COALESCE(MAX(child_order), 0) FROM workflow_items WHERE parent_uuid IS NULL",
+	).Scan(&maxOrder); err != nil {
+		return 0, fmt.Errorf("read max root order: %w", err)
+	}
+
+	return maxOrder, nil
+}
+
+func workflowItemCount(ctx context.Context, tx *sql.Tx) (int64, error) {
+	var count int64
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM workflow_items").Scan(&count); err != nil {
+		return 0, fmt.Errorf("count workflow items: %w", err)
+	}
+	return count, nil
 }

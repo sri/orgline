@@ -612,6 +612,33 @@
         font-weight: 600;
       }
 
+      .outline-empty {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        padding: 0.35rem 0.15rem;
+        color: var(--text-muted);
+      }
+
+      .outline-empty-create {
+        border: 1px solid var(--controls-divider);
+        border-radius: 6px;
+        background: var(--toggle-bg);
+        color: var(--toggle-text);
+        font-size: 0.75rem;
+        padding: 0.22rem 0.55rem;
+        cursor: pointer;
+      }
+
+      .outline-empty-create:hover {
+        background: var(--controls-segment-hover);
+      }
+
+      .outline-empty-create:focus-visible {
+        outline: 1px solid var(--toggle-focus);
+        outline-offset: 0;
+      }
+
       .outline-toolbar {
         display: flex;
         align-items: center;
@@ -1653,6 +1680,9 @@
 
         async function deleteItem(uuid) {
           if (localMode) {
+            if (collectTreeItems(outlineItems, []).length <= 1) {
+              throw new Error("cannot delete last item");
+            }
             const location = requireItemLocation(uuid);
             location.list.splice(location.index, 1);
             return;
@@ -1662,6 +1692,9 @@
             method: "DELETE"
           });
 
+          if (response.status === 409) {
+            throw new Error("cannot delete last item");
+          }
           if (!response.ok) {
             throw new Error(`delete item failed with status ${response.status}`);
           }
@@ -1687,6 +1720,45 @@
 
           if (!response.ok) {
             throw new Error(`create item failed with status ${response.status}`);
+          }
+
+          return response.json();
+        }
+
+        async function createChildItem(uuid) {
+          if (localMode) {
+            const location = requireItemLocation(uuid);
+            const newItem = createLocalItem("");
+            location.item.children.unshift(newItem);
+            location.item.is_open = true;
+            location.item.updated_at = nowTimestamp();
+            return { uuid: newItem.uuid };
+          }
+
+          const response = await fetch(`/api/items/${encodeURIComponent(uuid)}/child`, {
+            method: "POST"
+          });
+
+          if (!response.ok) {
+            throw new Error(`create child item failed with status ${response.status}`);
+          }
+
+          return response.json();
+        }
+
+        async function createRootItem() {
+          if (localMode) {
+            ensureLocalItemsInitialized();
+            const newItem = createLocalItem("");
+            localItems.push(newItem);
+            return { uuid: newItem.uuid };
+          }
+
+          const response = await fetch("/api/items", {
+            method: "POST"
+          });
+          if (!response.ok) {
+            throw new Error(`create root item failed with status ${response.status}`);
           }
 
           return response.json();
@@ -1794,6 +1866,89 @@
             syncDirtyState();
           });
 
+          function isEnterLikeKey(event) {
+            return (
+              event.key === "Enter" ||
+              event.key === "Return" ||
+              event.code === "Enter" ||
+              event.code === "NumpadEnter" ||
+              event.keyCode === 13
+            );
+          }
+
+          function handleCreateOnEnter() {
+            body.contentEditable = "false";
+            body.classList.remove("editing");
+
+            const currentBody = currentBodyText();
+            body.textContent = currentBody;
+            markItemDirty(item.uuid, currentBody !== savedBody);
+
+            const saveAndCreate = async () => {
+              try {
+                if (currentBody !== savedBody) {
+                  if (currentBody === "") {
+                    body.textContent = savedBody;
+                    markItemDirty(item.uuid, false);
+                    showError("Item body cannot be empty.");
+                    return;
+                  }
+
+                  try {
+                    await saveItemBody(item.uuid, currentBody);
+                    savedBody = currentBody;
+                    markItemDirty(item.uuid, false);
+                    clearError();
+                  } catch (error) {
+                    body.textContent = savedBody;
+                    markItemDirty(item.uuid, false);
+                    showError(`Unable to save item: ${String(error)}`);
+                    return;
+                  }
+                }
+
+                const createAsChild = renderContext.searchActive || renderContext.favoriteFilterActive;
+                const created = createAsChild
+                  ? await createChildItem(item.uuid)
+                  : await createItemAfterEnter(item.uuid);
+                if (favoriteFilterActive) {
+                  await saveItemFavoriteState(created.uuid, true);
+                  const createdItem = findItemByUUID(outlineItems, created.uuid);
+                  if (createdItem) {
+                    createdItem.is_favorite = true;
+                  }
+                }
+                if (renderContext.searchActive && searchInputEl instanceof HTMLInputElement) {
+                  if (preSearchOpenState instanceof Map) {
+                    let cursorUUID = item.uuid;
+                    while (cursorUUID !== "") {
+                      preSearchOpenState.set(cursorUUID, true);
+                      const node = findItemByUUID(outlineItems, cursorUUID);
+                      if (node) {
+                        node.is_open = true;
+                      }
+                      cursorUUID = findParentUUID(outlineItems, cursorUUID) || "";
+                    }
+                  }
+                  if (searchInputDebounceID !== 0) {
+                    window.clearTimeout(searchInputDebounceID);
+                    searchInputDebounceID = 0;
+                  }
+                  // Keep Enter behavior predictable in search mode by showing the newly created node.
+                  searchInputEl.value = "";
+                }
+                await loadOutline(created.uuid);
+              } catch (error) {
+                showError(`Unable to create item: ${String(error)}`);
+              } finally {
+                handlingEnter = false;
+              }
+            };
+
+            handlingEnter = true;
+            void saveAndCreate();
+          }
+
           body.addEventListener("keydown", (event) => {
             const selectedUUIDs = selectedItemUUIDsInVisibleOrder();
             const hasMultipleSelection = selectedUUIDs.length > 1;
@@ -1895,7 +2050,7 @@
               return;
             }
 
-            if (renderContext.searchActive) {
+            if (renderContext.searchActive && !isEnterLikeKey(event)) {
               return;
             }
 
@@ -1973,49 +2128,9 @@
               }
             }
 
-            if (event.key === "Enter" && !event.shiftKey) {
+            if (isEnterLikeKey(event) && !event.shiftKey) {
               event.preventDefault();
-              body.contentEditable = "false";
-              body.classList.remove("editing");
-
-              const currentBody = currentBodyText();
-              body.textContent = currentBody;
-              markItemDirty(item.uuid, currentBody !== savedBody);
-
-              const saveAndCreate = async () => {
-                try {
-                  if (currentBody !== savedBody) {
-                    if (currentBody === "") {
-                      body.textContent = savedBody;
-                      markItemDirty(item.uuid, false);
-                      showError("Item body cannot be empty.");
-                      return;
-                    }
-
-                    try {
-                      await saveItemBody(item.uuid, currentBody);
-                      savedBody = currentBody;
-                      markItemDirty(item.uuid, false);
-                      clearError();
-                    } catch (error) {
-                      body.textContent = savedBody;
-                      markItemDirty(item.uuid, false);
-                      showError(`Unable to save item: ${String(error)}`);
-                      return;
-                    }
-                  }
-
-                  const created = await createItemAfterEnter(item.uuid);
-                  await loadOutline(created.uuid);
-                } catch (error) {
-                  showError(`Unable to create item: ${String(error)}`);
-                } finally {
-                  handlingEnter = false;
-                }
-              };
-
-              handlingEnter = true;
-              void saveAndCreate();
+              handleCreateOnEnter();
               return;
             }
 
@@ -2064,6 +2179,21 @@
               handlingEnter = true;
               void saveAndMove();
             }
+          });
+
+          body.addEventListener("beforeinput", (event) => {
+            if (event.defaultPrevented || handlingEnter) {
+              return;
+            }
+            if (body.contentEditable !== "true") {
+              return;
+            }
+            if (event.inputType !== "insertParagraph") {
+              return;
+            }
+
+            event.preventDefault();
+            handleCreateOnEnter();
           });
 
           body.addEventListener("blur", async () => {
@@ -2319,8 +2449,79 @@
           return list;
         }
 
+        function renderEmptyState() {
+          const empty = document.createElement("div");
+          empty.className = "outline-empty";
+
+          const message = document.createElement("span");
+          message.textContent = "No items.";
+
+          const createButton = document.createElement("button");
+          createButton.type = "button";
+          createButton.className = "outline-empty-create";
+          createButton.textContent = "Create first item";
+          createButton.setAttribute("aria-label", "Create first item");
+          createButton.addEventListener("click", () => {
+            if (topActionsBusy) {
+              return;
+            }
+
+            topActionsBusy = true;
+            setTopActionsState();
+            void (async () => {
+              try {
+                const created = await createRootItem();
+                if (favoriteFilterActive) {
+                  await saveItemFavoriteState(created.uuid, true);
+                }
+                if (searchInputEl instanceof HTMLInputElement) {
+                  if (searchInputDebounceID !== 0) {
+                    window.clearTimeout(searchInputDebounceID);
+                    searchInputDebounceID = 0;
+                  }
+                  searchInputEl.value = "";
+                }
+                await loadOutline(created.uuid);
+                clearError();
+              } catch (error) {
+                showError(`Unable to create item: ${String(error)}`);
+              } finally {
+                topActionsBusy = false;
+                setTopActionsState();
+              }
+            })();
+          });
+
+          empty.appendChild(message);
+          empty.appendChild(createButton);
+          return empty;
+        }
+
         function renderOutline(focusUUID) {
           if (!errorEl || !rootEl) {
+            return;
+          }
+
+          if (outlineItems.length === 0) {
+            const zoomItemID = zoomItemIDFromURL();
+            if (zoomItemID !== "") {
+              writeZoomItemIDToURL("", true);
+            }
+
+            searchModeActive = false;
+            preSearchOpenState = null;
+            lastRenderState = {
+              baseItems: [],
+              searchActive: false,
+              searchView: { visibleIDs: new Set(), matchedIDs: new Set(), forcedOpenIDs: new Set() },
+              favoriteFilterActive
+            };
+
+            rootEl.replaceChildren(renderEmptyState());
+            setZoomContextVisible(false, "");
+            closeAllToolMenus();
+            setTopActionsState();
+            clearError();
             return;
           }
 

@@ -386,6 +386,41 @@ func TestDeleteItemAPIHandlerNotFound(t *testing.T) {
 	}
 }
 
+func TestDeleteItemAPIHandlerRejectsDeletingLastItem(t *testing.T) {
+	db := setupTestDB(t)
+
+	if _, err := db.Exec(
+		"DELETE FROM workflow_items WHERE uuid <> ?",
+		"11111111-1111-1111-1111-111111111111",
+	); err != nil {
+		t.Fatalf("reduce to one item: %v", err)
+	}
+
+	srv, err := New(Config{
+		Addr: ":0",
+		DB:   db,
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/items/11111111-1111-1111-1111-111111111111", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(rec, req)
+
+	if got, want := rec.Code, http.StatusConflict; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM workflow_items").Scan(&count); err != nil {
+		t.Fatalf("count items: %v", err)
+	}
+	if got, want := count, 1; got != want {
+		t.Fatalf("item count = %d, want %d", got, want)
+	}
+}
+
 func TestUpdateItemOpenStateAPIHandler(t *testing.T) {
 	db := setupTestDB(t)
 
@@ -516,6 +551,155 @@ func TestUpdateItemFavoriteStateAPIHandler(t *testing.T) {
 	if !found {
 		t.Fatalf("item %s not found in list response", uuid)
 	}
+}
+
+func TestCreateRootItemAPIHandler(t *testing.T) {
+	db := setupTestDB(t)
+
+	if _, err := db.Exec("DELETE FROM workflow_items"); err != nil {
+		t.Fatalf("delete all workflow items: %v", err)
+	}
+
+	srv, err := New(Config{
+		Addr: ":0",
+		DB:   db,
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/items", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(rec, req)
+
+	if got, want := rec.Code, http.StatusCreated; got != want {
+		t.Fatalf("status = %d, want %d", got, want)
+	}
+
+	var response struct {
+		UUID string `json:"uuid"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if response.UUID == "" {
+		t.Fatal("expected created uuid")
+	}
+
+	var parentUUID sql.NullString
+	var childOrder int
+	var body string
+	if err := db.QueryRow(
+		"SELECT parent_uuid, child_order, body FROM workflow_items WHERE uuid = ?",
+		response.UUID,
+	).Scan(&parentUUID, &childOrder, &body); err != nil {
+		t.Fatalf("query created root item: %v", err)
+	}
+
+	if parentUUID.Valid {
+		t.Fatalf("parent_uuid = %+v, want NULL for root item", parentUUID)
+	}
+	if childOrder != 1 {
+		t.Fatalf("child_order = %d, want 1", childOrder)
+	}
+	if body != "" {
+		t.Fatalf("body = %q, want empty", body)
+	}
+}
+
+func TestCreateChildItemAPIHandler(t *testing.T) {
+	db := setupTestDB(t)
+
+	srv, err := New(Config{
+		Addr: ":0",
+		DB:   db,
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+
+	t.Run("insert first child when children already exist", func(t *testing.T) {
+		parentUUID := "11111111-1111-1111-1111-111111111111"
+		req := httptest.NewRequest(http.MethodPost, "/api/items/"+parentUUID+"/child", nil)
+		rec := httptest.NewRecorder()
+		srv.Handler.ServeHTTP(rec, req)
+
+		if got, want := rec.Code, http.StatusCreated; got != want {
+			t.Fatalf("status = %d, want %d", got, want)
+		}
+
+		var response struct {
+			UUID string `json:"uuid"`
+		}
+		if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+			t.Fatalf("decode create child response: %v", err)
+		}
+		if response.UUID == "" {
+			t.Fatal("expected created child uuid")
+		}
+
+		var parent sql.NullString
+		var order int
+		if err := db.QueryRow(
+			"SELECT parent_uuid, child_order FROM workflow_items WHERE uuid = ?",
+			response.UUID,
+		).Scan(&parent, &order); err != nil {
+			t.Fatalf("query created child: %v", err)
+		}
+		if !parent.Valid || parent.String != parentUUID {
+			t.Fatalf("parent_uuid = %+v, want %s", parent, parentUUID)
+		}
+		if order != 1 {
+			t.Fatalf("child_order = %d, want 1", order)
+		}
+
+		var oldFirstChildOrder int
+		if err := db.QueryRow(
+			"SELECT child_order FROM workflow_items WHERE uuid = ?",
+			"11111111-1111-1111-1111-111111111112",
+		).Scan(&oldFirstChildOrder); err != nil {
+			t.Fatalf("query previous first child order: %v", err)
+		}
+		if oldFirstChildOrder != 2 {
+			t.Fatalf("previous first child order = %d, want 2", oldFirstChildOrder)
+		}
+	})
+
+	t.Run("create child under leaf parent", func(t *testing.T) {
+		parentUUID := "11111111-1111-1111-1111-111111111113"
+		req := httptest.NewRequest(http.MethodPost, "/api/items/"+parentUUID+"/child", nil)
+		rec := httptest.NewRecorder()
+		srv.Handler.ServeHTTP(rec, req)
+
+		if got, want := rec.Code, http.StatusCreated; got != want {
+			t.Fatalf("status = %d, want %d", got, want)
+		}
+
+		var response struct {
+			UUID string `json:"uuid"`
+		}
+		if err := json.NewDecoder(rec.Body).Decode(&response); err != nil {
+			t.Fatalf("decode create child response: %v", err)
+		}
+		if response.UUID == "" {
+			t.Fatal("expected created child uuid")
+		}
+
+		var parent sql.NullString
+		var order int
+		if err := db.QueryRow(
+			"SELECT parent_uuid, child_order FROM workflow_items WHERE uuid = ?",
+			response.UUID,
+		).Scan(&parent, &order); err != nil {
+			t.Fatalf("query created child under leaf: %v", err)
+		}
+		if !parent.Valid || parent.String != parentUUID {
+			t.Fatalf("parent_uuid = %+v, want %s", parent, parentUUID)
+		}
+		if order != 1 {
+			t.Fatalf("child_order = %d, want 1", order)
+		}
+	})
 }
 
 func TestCreateItemAfterEnterAsSibling(t *testing.T) {
@@ -870,6 +1054,10 @@ func TestCreateIndentOutdentHandlersNotFound(t *testing.T) {
 		path string
 	}{
 		{
+			name: "child",
+			path: "/api/items/not-a-real-id/child",
+		},
+		{
 			name: "enter",
 			path: "/api/items/not-a-real-id/enter",
 		},
@@ -941,6 +1129,11 @@ func TestMutationHandlersMissingUUID(t *testing.T) {
 			name:    "create item after enter",
 			method:  http.MethodPost,
 			handler: createItemAfterEnterAPIHandler(store),
+		},
+		{
+			name:    "create child item",
+			method:  http.MethodPost,
+			handler: createChildItemAPIHandler(store),
 		},
 		{
 			name:    "indent item",

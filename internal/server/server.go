@@ -50,6 +50,8 @@ func New(cfg Config) (*http.Server, error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/hello", helloAPIHandler)
 	mux.HandleFunc("GET /api/items", itemsAPIHandler(workflowStore))
+	mux.HandleFunc("POST /api/items", createRootItemAPIHandler(workflowStore))
+	mux.HandleFunc("POST /api/items/{uuid}/child", createChildItemAPIHandler(workflowStore))
 	mux.HandleFunc("PATCH /api/items/{uuid}", updateItemBodyAPIHandler(workflowStore))
 	mux.HandleFunc("DELETE /api/items/{uuid}", deleteItemAPIHandler(workflowStore))
 	mux.HandleFunc("PATCH /api/items/{uuid}/open-state", updateItemOpenStateAPIHandler(workflowStore))
@@ -112,6 +114,60 @@ func itemsAPIHandler(store *workflow.Store) http.HandlerFunc {
 	}
 }
 
+func createRootItemAPIHandler(store *workflow.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		newUUID, err := store.CreateRoot(r.Context())
+		if err != nil {
+			http.Error(w, "create root item", http.StatusInternalServerError)
+			return
+		}
+
+		response := struct {
+			UUID string `json:"uuid"`
+		}{
+			UUID: newUUID,
+		}
+
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusCreated)
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			http.Error(w, "encode response", http.StatusInternalServerError)
+		}
+	}
+}
+
+func createChildItemAPIHandler(store *workflow.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		uuid := r.PathValue("uuid")
+		if uuid == "" {
+			http.Error(w, "missing uuid", http.StatusBadRequest)
+			return
+		}
+
+		newUUID, err := store.CreateChild(r.Context(), uuid)
+		if err != nil {
+			if errors.Is(err, workflow.ErrItemNotFound) {
+				http.NotFound(w, r)
+				return
+			}
+			http.Error(w, "create child item", http.StatusInternalServerError)
+			return
+		}
+
+		response := struct {
+			UUID string `json:"uuid"`
+		}{
+			UUID: newUUID,
+		}
+
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(http.StatusCreated)
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			http.Error(w, "encode response", http.StatusInternalServerError)
+		}
+	}
+}
+
 func updateItemBodyAPIHandler(store *workflow.Store) http.HandlerFunc {
 	type request struct {
 		Body string `json:"body"`
@@ -164,6 +220,10 @@ func deleteItemAPIHandler(store *workflow.Store) http.HandlerFunc {
 		if err != nil {
 			if errors.Is(err, workflow.ErrItemNotFound) {
 				http.NotFound(w, r)
+				return
+			}
+			if errors.Is(err, workflow.ErrCannotDeleteLastItem) {
+				http.Error(w, "cannot delete last item", http.StatusConflict)
 				return
 			}
 			http.Error(w, "delete item", http.StatusInternalServerError)
