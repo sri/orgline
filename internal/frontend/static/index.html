@@ -968,6 +968,78 @@
           return new Date().toISOString();
         }
 
+        function parseAppTimestamp(value) {
+          const raw = typeof value === "string" ? value.trim() : "";
+          if (raw === "") {
+            return null;
+          }
+
+          const normalized = raw.includes("T") ? raw : `${raw.replace(" ", "T")}Z`;
+          const parsed = new Date(normalized);
+          if (Number.isNaN(parsed.getTime())) {
+            return null;
+          }
+          return parsed;
+        }
+
+        function relativeDateString(value) {
+          const date = parseAppTimestamp(value);
+          if (!date) {
+            return "unknown";
+          }
+
+          const deltaMs = date.getTime() - Date.now();
+          const absMs = Math.abs(deltaMs);
+          const minuteMs = 60 * 1000;
+          const hourMs = 60 * minuteMs;
+          const dayMs = 24 * hourMs;
+          const weekMs = 7 * dayMs;
+          const monthMs = 30 * dayMs;
+          const yearMs = 365 * dayMs;
+
+          let unit = "minute";
+          let valueByUnit = deltaMs / minuteMs;
+          if (absMs < minuteMs) {
+            unit = "second";
+            valueByUnit = deltaMs / 1000;
+          } else if (absMs < hourMs) {
+            unit = "minute";
+            valueByUnit = deltaMs / minuteMs;
+          } else if (absMs < dayMs) {
+            unit = "hour";
+            valueByUnit = deltaMs / hourMs;
+          } else if (absMs < weekMs) {
+            unit = "day";
+            valueByUnit = deltaMs / dayMs;
+          } else if (absMs < monthMs) {
+            unit = "week";
+            valueByUnit = deltaMs / weekMs;
+          } else if (absMs < yearMs) {
+            unit = "month";
+            valueByUnit = deltaMs / monthMs;
+          } else {
+            unit = "year";
+            valueByUnit = deltaMs / yearMs;
+          }
+
+          const rounded = Math.round(valueByUnit);
+          try {
+            const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+            return formatter.format(rounded, unit);
+          } catch (_error) {
+            if (rounded === 0) {
+              return "now";
+            }
+            const suffix = rounded > 0 ? "from now" : "ago";
+            return `${Math.abs(rounded)} ${unit}${Math.abs(rounded) === 1 ? "" : "s"} ${suffix}`;
+          }
+        }
+
+        function itemHoverTitle(item) {
+          const numChildren = Array.isArray(item.children) ? item.children.length : 0;
+          return `uuid: ${item.uuid}\ncreated at: ${relativeDateString(item.created_at)}\nupdated at: ${relativeDateString(item.updated_at)}\nnum children: ${numChildren}`;
+        }
+
         function generateUUID() {
           if (globalThis.crypto && typeof globalThis.crypto.randomUUID === "function") {
             return globalThis.crypto.randomUUID();
@@ -2090,7 +2162,7 @@
           const body = document.createElement("div");
           body.className = "item-body";
           body.dataset.uuid = item.uuid;
-          body.title = `UUID: ${item.uuid}\nUpdated: ${item.updated_at}`;
+          body.title = itemHoverTitle(item);
           body.contentEditable = "false";
           body.spellcheck = false;
 
@@ -2177,7 +2249,8 @@
                   }
                 }
 
-                const filteredModeActive = renderContext.searchActive || renderContext.favoriteFilterActive;
+                const isZoomRoot = renderContext.isZoomView === true && renderContext.zoomItemID === item.uuid;
+                const filteredModeActive = renderContext.searchActive || renderContext.favoriteFilterActive || isZoomRoot;
                 const liveItem = findItemByUUID(outlineItems, item.uuid);
                 const hasChildren = (liveItem ? liveItem.children : item.children).length > 0;
                 const createAsChild = filteredModeActive && !hasChildren && !enterCreatedItemUUIDs.has(item.uuid);
@@ -2999,7 +3072,9 @@
             query,
             searchView,
             favoriteFilterActive,
-            favoriteRootIDs
+            favoriteRootIDs,
+            isZoomView,
+            zoomItemID
           }));
           applySelectedItemUI();
 
