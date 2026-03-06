@@ -1359,6 +1359,18 @@
           return location;
         }
 
+        function itemPositionSnapshot(uuid) {
+          const location = findItemLocation(outlineItems, uuid);
+          if (!location) {
+            return null;
+          }
+
+          return {
+            parentUUID: location.parentItem ? location.parentItem.uuid : "",
+            index: location.index
+          };
+        }
+
         function setZoomContextVisible(isVisible, parentUUID = "") {
           if (!(zoomContextEl instanceof HTMLElement)) {
             return;
@@ -1696,16 +1708,27 @@
 
         async function moveSelectedItems(selectedUUIDs, isOutdent, focusUUID) {
           const moveTargets = selectionRootUUIDsInVisibleOrder(selectedUUIDs);
+          const previousPositions = new Map();
+          if (!applyingUndo) {
+            for (const uuid of moveTargets) {
+              previousPositions.set(uuid, itemPositionSnapshot(uuid));
+            }
+          }
           const moveAction = isOutdent ? outdentItem : indentItem;
           for (const uuid of moveTargets) {
             await moveAction(uuid);
           }
           if (!applyingUndo && moveTargets.length === 1) {
             const movedUUID = moveTargets[0];
+            const previousPosition = previousPositions.get(movedUUID);
+            if (!previousPosition) {
+              await loadOutline(focusUUID);
+              return;
+            }
             pushUndoAction({
               focusUUID: movedUUID,
               apply: async () => {
-                await (isOutdent ? indentItem : outdentItem)(movedUUID);
+                await moveItemToPosition(movedUUID, previousPosition.parentUUID, previousPosition.index);
               }
             });
           }
@@ -2008,6 +2031,55 @@
           });
           if (!response.ok) {
             throw new Error(`outdent failed with status ${response.status}`);
+          }
+        }
+
+        async function moveItemToPosition(uuid, parentUUID, index) {
+          if (!Number.isInteger(index) || index < 0) {
+            throw new Error("invalid target position");
+          }
+
+          if (localMode) {
+            const fromLocation = requireItemLocation(uuid);
+            const movedItem = fromLocation.list.splice(fromLocation.index, 1)[0];
+
+            let targetParentItem = null;
+            let targetList = outlineItems;
+            if (parentUUID !== "") {
+              const targetLocation = requireItemLocation(parentUUID);
+              targetParentItem = targetLocation.item;
+              targetList = targetParentItem.children;
+            }
+
+            let targetIndex = index;
+            if (targetList === fromLocation.list && fromLocation.index < targetIndex) {
+              targetIndex -= 1;
+            }
+            targetIndex = Math.max(0, Math.min(targetIndex, targetList.length));
+            targetList.splice(targetIndex, 0, movedItem);
+
+            const timestamp = nowTimestamp();
+            movedItem.updated_at = timestamp;
+            if (fromLocation.parentItem) {
+              fromLocation.parentItem.updated_at = timestamp;
+            }
+            if (targetParentItem && targetParentItem !== fromLocation.parentItem) {
+              targetParentItem.updated_at = timestamp;
+            }
+            return;
+          }
+
+          const response = await fetch(`/api/items/${encodeURIComponent(uuid)}/move`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              parent_uuid: parentUUID === "" ? null : parentUUID,
+              child_order: index + 1
+            })
+          });
+
+          if (!response.ok) {
+            throw new Error(`move failed with status ${response.status}`);
           }
         }
 
@@ -2356,7 +2428,7 @@
               body.textContent = currentBody;
               markItemDirty(item.uuid, currentBody !== savedBody);
               const moveAction = event.shiftKey ? outdentItem : indentItem;
-              const undoMoveAction = event.shiftKey ? indentItem : outdentItem;
+              const previousPosition = itemPositionSnapshot(item.uuid);
 
               const saveAndMove = async () => {
                 try {
@@ -2382,12 +2454,14 @@
                   }
 
                   await moveAction(item.uuid);
-                  pushUndoAction({
-                    focusUUID: item.uuid,
-                    apply: async () => {
-                      await undoMoveAction(item.uuid);
-                    }
-                  });
+                  if (previousPosition) {
+                    pushUndoAction({
+                      focusUUID: item.uuid,
+                      apply: async () => {
+                        await moveItemToPosition(item.uuid, previousPosition.parentUUID, previousPosition.index);
+                      }
+                    });
+                  }
                   await loadOutline(item.uuid);
                 } catch (error) {
                   showError(`Unable to move item: ${String(error)}`);
@@ -2614,7 +2688,7 @@
             toggle.type = "button";
             toggle.className = "item-toggle";
 
-            function moveSingleItem(moveAction, undoMoveAction) {
+            function moveSingleItem(moveAction) {
               if (topActionsBusy) {
                 return;
               }
@@ -2628,13 +2702,16 @@
                   if (!canContinue) {
                     return;
                   }
+                  const previousPosition = itemPositionSnapshot(item.uuid);
                   await moveAction(item.uuid);
-                  pushUndoAction({
-                    focusUUID: item.uuid,
-                    apply: async () => {
-                      await undoMoveAction(item.uuid);
-                    }
-                  });
+                  if (previousPosition) {
+                    pushUndoAction({
+                      focusUUID: item.uuid,
+                      apply: async () => {
+                        await moveItemToPosition(item.uuid, previousPosition.parentUUID, previousPosition.index);
+                      }
+                    });
+                  }
                   await loadOutline(item.uuid);
                   clearError();
                 } catch (error) {
@@ -2659,7 +2736,7 @@
               if (!canOutdentInView) {
                 return;
               }
-              moveSingleItem(outdentItem, indentItem);
+              moveSingleItem(outdentItem);
             });
 
             const indentBtn = document.createElement("button");
@@ -2675,7 +2752,7 @@
               if (!canIndentInView) {
                 return;
               }
-              moveSingleItem(indentItem, outdentItem);
+              moveSingleItem(indentItem);
             });
 
             const hasChildren = childItems.length > 0;
