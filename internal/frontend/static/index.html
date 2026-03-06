@@ -1069,6 +1069,13 @@
           setTopActionsState();
         }
 
+        function peekUndoAction() {
+          if (undoStack.length === 0) {
+            return null;
+          }
+          return undoStack[undoStack.length - 1];
+        }
+
         async function performUndo() {
           if (topActionsBusy || undoStack.length === 0) {
             return;
@@ -1810,8 +1817,15 @@
               liveItem.updated_at = nowTimestamp();
             }
 
-            if (previousBody !== null && !applyingUndo) {
+            const topUndo = peekUndoAction();
+            const shouldSkipBodyUndo = previousBody === "" &&
+              topUndo &&
+              topUndo.kind === "create-item" &&
+              topUndo.uuid === uuid;
+            if (previousBody !== null && !applyingUndo && !shouldSkipBodyUndo) {
               pushUndoAction({
+                kind: "body-update",
+                uuid,
                 focusUUID: uuid,
                 apply: async () => {
                   await saveItemBody(uuid, previousBody);
@@ -2103,6 +2117,8 @@
                   : await createItemAfterEnter(item.uuid);
                 enterCreatedItemUUIDs.add(created.uuid);
                 pushUndoAction({
+                  kind: "create-item",
+                  uuid: created.uuid,
                   focusUUID: item.uuid,
                   apply: async () => {
                     await deleteItem(created.uuid);
@@ -2767,6 +2783,8 @@
               try {
                 const created = await createRootItem();
                 pushUndoAction({
+                  kind: "create-item",
+                  uuid: created.uuid,
                   focusUUID: "",
                   apply: async () => {
                     await deleteItem(created.uuid);
