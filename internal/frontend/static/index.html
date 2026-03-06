@@ -1126,8 +1126,12 @@
           }
         }
 
-        function setSelectedItem(uuid) {
+        function setSelectedItem(uuid, preserveDragSelection = false) {
           selectedItemUUID = uuid || "";
+          if (!preserveDragSelection) {
+            keyboardRangeAnchorUUID = "";
+            dragSelectedItemUUIDs.clear();
+          }
           applySelectedItemUI();
           setTopActionsState();
         }
@@ -1592,7 +1596,8 @@
           selection.addRange(range);
         }
 
-        function focusItemForEditing(uuid) {
+        function focusItemForEditing(uuid, options = {}) {
+          const preserveDragSelection = options && options.preserveDragSelection === true;
           if (!rootEl) {
             return;
           }
@@ -1604,7 +1609,7 @@
 
           target.contentEditable = "true";
           target.classList.add("editing");
-          setSelectedItem(uuid);
+          setSelectedItem(uuid, preserveDragSelection);
           suppressFocusChrome(target);
           target.focus();
           placeCaretAtEnd(target);
@@ -2004,12 +2009,12 @@
                       if (keyboardRangeAnchorUUID === "" || !visibleUUIDList.includes(keyboardRangeAnchorUUID)) {
                         keyboardRangeAnchorUUID = item.uuid;
                       }
-                      setSelectedItem(targetUUID);
+                      setSelectedItem(targetUUID, true);
                       setRangeSelectionByVisibleOrder(keyboardRangeAnchorUUID, targetUUID);
                     } else {
                       setSelectedItem(targetUUID);
                     }
-                    focusItemForEditing(targetUUID);
+                    focusItemForEditing(targetUUID, { preserveDragSelection: isRangeSelection });
                   } else {
                     if (isRangeSelection) {
                       const visibleUUIDList = visibleItemUUIDs();
@@ -2018,7 +2023,7 @@
                       }
                       setRangeSelectionByVisibleOrder(keyboardRangeAnchorUUID, item.uuid);
                     }
-                    focusItemForEditing(item.uuid);
+                    focusItemForEditing(item.uuid, { preserveDragSelection: isRangeSelection });
                   }
                 } finally {
                   handlingEnter = false;
