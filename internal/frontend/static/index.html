@@ -1289,14 +1289,21 @@
             type="button"
             title="Generate a test message"
             aria-label="Generate a test message"
-          >Errors</button>
+          >gen errors msgs</button>
+          <button
+            id="debug-toolbar-cycle-btn"
+            class="debug-toolbar-action"
+            type="button"
+            title="Cycle themes"
+            aria-label="Cycle themes"
+          >cycle themes: default 5</button>
           <button
             id="debug-toolbar-state-btn"
             class="debug-toolbar-action"
             type="button"
             title="Show current JSON state"
             aria-label="Show current JSON state"
-          >State</button>
+          >show state</button>
           <button
             id="debug-toolbar-close-btn"
             class="debug-toolbar-close"
@@ -1346,18 +1353,22 @@
         const debugToolbarEl = document.getElementById("debug-toolbar");
         const debugToolbarCloseBtnEl = document.getElementById("debug-toolbar-close-btn");
         const debugToolbarErrorsBtnEl = document.getElementById("debug-toolbar-errors-btn");
+        const debugToolbarCycleBtnEl = document.getElementById("debug-toolbar-cycle-btn");
         const debugToolbarStateBtnEl = document.getElementById("debug-toolbar-state-btn");
         const debugJSONPanelEl = document.getElementById("debug-json-panel");
         const debugJSONViewerEl = document.getElementById("debug-json-viewer");
         const debugJSONCopyBtnEl = document.getElementById("debug-json-copy-btn");
         const themeStorageKey = "orgline-theme";
         const debugModeStorageKey = "orgline-debug-mode-v1";
+        const debugThemeCycleSecondsStorageKey = "orgline-debug-theme-cycle-seconds-v1";
         const localItemsStorageKey = "orgline-items-v1";
         const messageDismissalsStorageKey = "orgline-message-dismissals-v1";
         const localModeMessageID = "local-mode-warning";
         const zoomQueryParam = "item_id";
         const debugQueryParam = "debug";
+        const debugCycleSecondsQueryParam = "debug_cycle_seconds";
         const searchMinChars = 2;
+        const defaultDebugThemeCycleDelayMs = 5000;
         let localMode = (() => {
           const value = (new URLSearchParams(window.location.search).get("local") || "").trim().toLowerCase();
           return value === "true" || value === "1" || value === "yes";
@@ -1388,6 +1399,14 @@
         const stackMessages = [];
         let messageDismissals = {};
         let debugMessageSequence = 0;
+        let debugThemeCycleDelayMs = defaultDebugThemeCycleDelayMs;
+        let debugThemeCycleTimerID = 0;
+        let debugThemeCycleRunToken = 0;
+        let debugThemeCycleRunning = false;
+        let debugThemeCyclePaused = false;
+        let debugThemeCycleCountdownSeconds = Math.max(1, Math.round(defaultDebugThemeCycleDelayMs / 1000));
+        let debugThemeCycleOriginalThemeID = "";
+        let debugThemeCycleNextThemeIndex = 0;
 
         const themes = [
           { id: "default", label: "default" },
@@ -1410,6 +1429,12 @@
 
           rebuildThemeMenu(selectedTheme);
           renderMessageStack();
+          renderDebugThemeCycleButton();
+        }
+
+        function currentThemeID() {
+          const current = (document.documentElement.dataset.theme || "default").trim();
+          return themes.some((theme) => theme.id === current) ? current : "default";
         }
 
         function closeThemeMenu() {
@@ -1490,6 +1515,39 @@
           return null;
         }
 
+        function parsePositiveNumber(value) {
+          const parsed = Number(value);
+          if (!Number.isFinite(parsed) || parsed <= 0) {
+            return null;
+          }
+          return parsed;
+        }
+
+        function resolveDebugThemeCycleDelayMs() {
+          const params = new URLSearchParams(window.location.search);
+          const querySeconds = parsePositiveNumber(params.get(debugCycleSecondsQueryParam));
+          if (querySeconds !== null) {
+            const normalizedSeconds = Math.round(querySeconds * 100) / 100;
+            try {
+              localStorage.setItem(debugThemeCycleSecondsStorageKey, String(normalizedSeconds));
+            } catch (_error) {
+              // Best effort only.
+            }
+            return Math.round(normalizedSeconds * 1000);
+          }
+
+          try {
+            const storedSeconds = parsePositiveNumber(localStorage.getItem(debugThemeCycleSecondsStorageKey));
+            if (storedSeconds !== null) {
+              return Math.round(storedSeconds * 1000);
+            }
+          } catch (_error) {
+            // Ignore storage failures.
+          }
+
+          return defaultDebugThemeCycleDelayMs;
+        }
+
         function debugModeFromQuery() {
           const raw = new URLSearchParams(window.location.search).get(debugQueryParam);
           return parseBooleanQueryValue(raw);
@@ -1540,6 +1598,127 @@
             return;
           }
           debugJSONPanelEl.hidden = true;
+        }
+
+        function renderDebugThemeCycleButton() {
+          if (!(debugToolbarCycleBtnEl instanceof HTMLButtonElement)) {
+            return;
+          }
+          const countdown = (debugThemeCycleRunning || debugThemeCyclePaused)
+            ? Math.max(0, debugThemeCycleCountdownSeconds)
+            : Math.max(1, Math.round(debugThemeCycleDelayMs / 1000));
+          const themeID = currentThemeID();
+          debugToolbarCycleBtnEl.textContent = `cycle themes: ${themeID} ${countdown}`;
+          if (debugThemeCycleRunning) {
+            debugToolbarCycleBtnEl.title = "Pause theme cycle";
+          } else if (debugThemeCyclePaused) {
+            debugToolbarCycleBtnEl.title = "Resume theme cycle";
+          } else {
+            debugToolbarCycleBtnEl.title = "Cycle themes";
+          }
+          debugToolbarCycleBtnEl.setAttribute("aria-label", debugToolbarCycleBtnEl.textContent);
+        }
+
+        function stopDebugThemeCycle() {
+          debugThemeCycleRunToken += 1;
+          debugThemeCycleRunning = false;
+          debugThemeCyclePaused = false;
+          if (debugThemeCycleTimerID !== 0) {
+            window.clearTimeout(debugThemeCycleTimerID);
+            debugThemeCycleTimerID = 0;
+          }
+          debugThemeCycleCountdownSeconds = Math.max(1, Math.round(debugThemeCycleDelayMs / 1000));
+          debugThemeCycleOriginalThemeID = "";
+          debugThemeCycleNextThemeIndex = 0;
+          renderDebugThemeCycleButton();
+        }
+
+        function pauseDebugThemeCycle() {
+          if (!debugThemeCycleRunning) {
+            return;
+          }
+          debugThemeCycleRunning = false;
+          debugThemeCyclePaused = true;
+          if (debugThemeCycleTimerID !== 0) {
+            window.clearTimeout(debugThemeCycleTimerID);
+            debugThemeCycleTimerID = 0;
+          }
+          renderDebugThemeCycleButton();
+        }
+
+        function finalizeDebugThemeCycle(runToken) {
+          if (!debugThemeCycleRunning || runToken !== debugThemeCycleRunToken) {
+            return;
+          }
+          debugThemeCycleRunning = false;
+          debugThemeCyclePaused = false;
+          debugThemeCycleTimerID = 0;
+          const restoreThemeID = debugThemeCycleOriginalThemeID;
+          debugThemeCycleOriginalThemeID = "";
+          debugThemeCycleNextThemeIndex = 0;
+          debugThemeCycleCountdownSeconds = Math.max(1, Math.round(debugThemeCycleDelayMs / 1000));
+          if (restoreThemeID !== "") {
+            applyTheme(restoreThemeID);
+          } else {
+            renderDebugThemeCycleButton();
+          }
+        }
+
+        function scheduleDebugThemeCycleTick(runToken) {
+          if (!debugThemeCycleRunning || runToken !== debugThemeCycleRunToken) {
+            return;
+          }
+          debugThemeCycleTimerID = window.setTimeout(() => {
+            if (!debugThemeCycleRunning || runToken !== debugThemeCycleRunToken) {
+              return;
+            }
+
+            if (debugThemeCycleCountdownSeconds > 1) {
+              debugThemeCycleCountdownSeconds -= 1;
+              renderDebugThemeCycleButton();
+              scheduleDebugThemeCycleTick(runToken);
+              return;
+            }
+
+            if (debugThemeCycleNextThemeIndex >= themes.length) {
+              finalizeDebugThemeCycle(runToken);
+              return;
+            }
+
+            applyTheme(themes[debugThemeCycleNextThemeIndex].id);
+            debugThemeCycleNextThemeIndex += 1;
+            debugThemeCycleCountdownSeconds = Math.max(1, Math.round(debugThemeCycleDelayMs / 1000));
+            renderDebugThemeCycleButton();
+            scheduleDebugThemeCycleTick(runToken);
+          }, 1000);
+        }
+
+        function resumeDebugThemeCycle() {
+          if (!debugThemeCyclePaused || debugThemeCycleRunning) {
+            return;
+          }
+          debugThemeCycleRunning = true;
+          debugThemeCyclePaused = false;
+          const runToken = debugThemeCycleRunToken;
+          renderDebugThemeCycleButton();
+          scheduleDebugThemeCycleTick(runToken);
+        }
+
+        function startDebugThemeCycle() {
+          stopDebugThemeCycle();
+          debugThemeCycleRunning = true;
+          debugThemeCyclePaused = false;
+          const runToken = debugThemeCycleRunToken;
+          debugThemeCycleOriginalThemeID = currentThemeID();
+          debugThemeCycleNextThemeIndex = 0;
+
+          if (debugThemeCycleNextThemeIndex < themes.length) {
+            applyTheme(themes[debugThemeCycleNextThemeIndex].id);
+            debugThemeCycleNextThemeIndex += 1;
+          }
+          debugThemeCycleCountdownSeconds = Math.max(1, Math.round(debugThemeCycleDelayMs / 1000));
+          renderDebugThemeCycleButton();
+          scheduleDebugThemeCycleTick(runToken);
         }
 
         function buildDebugStatePayload() {
@@ -1604,6 +1783,9 @@
           if (options.persist !== false) {
             persistDebugMode(debugModeEnabled);
           }
+          if (!debugModeEnabled) {
+            stopDebugThemeCycle();
+          }
           renderDebugToolbar();
         }
 
@@ -1631,8 +1813,10 @@
         }
 
         function initDebugToolbar() {
+          debugThemeCycleDelayMs = resolveDebugThemeCycleDelayMs();
           debugModeEnabled = resolveInitialDebugMode();
           renderDebugToolbar();
+          renderDebugThemeCycleButton();
 
           if (debugToolbarCloseBtnEl instanceof HTMLButtonElement) {
             debugToolbarCloseBtnEl.addEventListener("click", (event) => {
@@ -1653,6 +1837,22 @@
               pushStackMessage(level, `${label} #${debugMessageSequence} (${timestamp})`, {
                 dismissible: true
               });
+            });
+          }
+
+          if (debugToolbarCycleBtnEl instanceof HTMLButtonElement) {
+            debugToolbarCycleBtnEl.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (debugThemeCycleRunning) {
+                pauseDebugThemeCycle();
+                return;
+              }
+              if (debugThemeCyclePaused) {
+                resumeDebugThemeCycle();
+                return;
+              }
+              startDebugThemeCycle();
             });
           }
 
