@@ -1244,14 +1244,6 @@
           applyTheme(storedTheme);
         }
 
-        function activeThemeID() {
-          const current = (document.documentElement.dataset.theme || "default").trim();
-          if (themes.some((theme) => theme.id === current)) {
-            return current;
-          }
-          return "default";
-        }
-
         function loadMessageDismissals() {
           try {
             const encoded = localStorage.getItem(messageDismissalsStorageKey);
@@ -1262,7 +1254,22 @@
             if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
               return {};
             }
-            return parsed;
+            const normalized = {};
+            for (const [rawKey, value] of Object.entries(parsed)) {
+              if (value !== true || typeof rawKey !== "string") {
+                continue;
+              }
+              const key = rawKey.trim();
+              if (key === "") {
+                continue;
+              }
+              const legacySeparatorIndex = key.lastIndexOf("::");
+              const dismissKey = legacySeparatorIndex > 0 ? key.slice(legacySeparatorIndex + 2).trim() : key;
+              if (dismissKey !== "") {
+                normalized[dismissKey] = true;
+              }
+            }
+            return normalized;
           } catch (_error) {
             return {};
           }
@@ -1276,23 +1283,29 @@
           }
         }
 
-        function dismissTokenForTheme(themeID, dismissKey) {
-          return `${themeID}::${dismissKey}`;
+        function dismissToken(dismissKey) {
+          if (typeof dismissKey !== "string") {
+            return "";
+          }
+          return dismissKey.trim();
         }
 
-        function isMessageDismissedForCurrentTheme(message) {
+        function isMessageDismissed(message) {
           if (!message || !message.dismissKey) {
             return false;
           }
-          const token = dismissTokenForTheme(activeThemeID(), message.dismissKey);
-          return messageDismissals[token] === true;
+          const token = dismissToken(message.dismissKey);
+          return token !== "" && messageDismissals[token] === true;
         }
 
-        function dismissMessageForCurrentTheme(message) {
+        function dismissMessage(message) {
           if (!message || !message.dismissKey) {
             return;
           }
-          const token = dismissTokenForTheme(activeThemeID(), message.dismissKey);
+          const token = dismissToken(message.dismissKey);
+          if (token === "") {
+            return;
+          }
           messageDismissals[token] = true;
           persistMessageDismissals();
         }
@@ -1359,7 +1372,7 @@
         }
 
         function visibleStackMessages() {
-          return stackMessages.filter((message) => !isMessageDismissedForCurrentTheme(message));
+          return stackMessages.filter((message) => !isMessageDismissed(message));
         }
 
         function closeMessageStackMenu() {
@@ -1445,7 +1458,7 @@
                 event.preventDefault();
                 event.stopPropagation();
                 if (message.persistent && message.dismissKey) {
-                  dismissMessageForCurrentTheme(message);
+                  dismissMessage(message);
                 } else {
                   removeStackMessageByID(message.id);
                 }
