@@ -913,6 +913,7 @@
         const dirtyEditingItemIDs = new Set();
         const dragSelectedItemUUIDs = new Set();
         let dragSelectionActive = false;
+        let dragSelectionAnchorUUID = "";
         let keyboardRangeAnchorUUID = "";
         let favoriteFilterActive = false;
         let topActionsBusy = false;
@@ -1423,15 +1424,37 @@
           applySelectedItemUI();
         }
 
-        function addDragSelectionItem(uuid) {
-          if (!uuid) {
+        function startDragSelectionAtClientY(clientY) {
+          const startUUID = itemUUIDNearClientY(clientY);
+          if (startUUID === "") {
+            return false;
+          }
+
+          dragSelectionAnchorUUID = startUUID;
+          dragSelectionActive = true;
+          keyboardRangeAnchorUUID = "";
+          setSelectedItem(startUUID, true);
+          setRangeSelectionByVisibleOrder(startUUID, startUUID);
+          return true;
+        }
+
+        function updateDragSelectionAtClientY(clientY) {
+          if (!dragSelectionActive) {
             return;
           }
-          if (dragSelectedItemUUIDs.has(uuid)) {
+
+          const anchorUUID = dragSelectionAnchorUUID;
+          if (anchorUUID === "") {
             return;
           }
-          dragSelectedItemUUIDs.add(uuid);
-          applySelectedItemUI();
+
+          const targetUUID = itemUUIDNearClientY(clientY);
+          if (targetUUID === "") {
+            return;
+          }
+
+          setSelectedItem(targetUUID, true);
+          setRangeSelectionByVisibleOrder(anchorUUID, targetUUID);
         }
 
         function zoomItemIDFromURL() {
@@ -1746,23 +1769,57 @@
           return highlightedSliceHTML(text, 0, text.length, ranges);
         }
 
-        function visibleItemUUIDs() {
+        function visibleItemRows() {
           if (!rootEl) {
             return [];
           }
 
-          return Array.from(rootEl.querySelectorAll(".item-row[data-uuid]"))
-            .filter((row) => {
-              if (!(row instanceof HTMLElement)) {
-                return false;
-              }
-              if (row.closest("[hidden]")) {
-                return false;
-              }
-              return row.getClientRects().length > 0;
-            })
+          return Array.from(rootEl.querySelectorAll(".item-row[data-uuid]")).filter((row) => {
+            if (!(row instanceof HTMLElement)) {
+              return false;
+            }
+            if (row.closest("[hidden]")) {
+              return false;
+            }
+            return row.getClientRects().length > 0;
+          });
+        }
+
+        function visibleItemUUIDs() {
+          return visibleItemRows()
             .map((row) => row.dataset.uuid || "")
             .filter((uuid) => uuid !== "");
+        }
+
+        function itemUUIDNearClientY(clientY) {
+          const rows = visibleItemRows();
+          if (rows.length === 0) {
+            return "";
+          }
+
+          let bestUUID = "";
+          let bestDistance = Number.POSITIVE_INFINITY;
+          for (const row of rows) {
+            const uuid = row.dataset.uuid || "";
+            if (uuid === "") {
+              continue;
+            }
+
+            const rect = row.getBoundingClientRect();
+            let distance = 0;
+            if (clientY < rect.top) {
+              distance = rect.top - clientY;
+            } else if (clientY > rect.bottom) {
+              distance = clientY - rect.bottom;
+            }
+
+            if (distance < bestDistance) {
+              bestDistance = distance;
+              bestUUID = uuid;
+            }
+          }
+
+          return bestUUID;
         }
 
         function adjacentItemUUID(uuid, direction) {
@@ -1845,11 +1902,93 @@
           return target.closest("[contenteditable=\"true\"]") !== null;
         }
 
+        function isFormFieldEventTarget(target) {
+          if (!(target instanceof Element)) {
+            return false;
+          }
+          return (
+            target instanceof HTMLInputElement ||
+            target instanceof HTMLTextAreaElement ||
+            target instanceof HTMLSelectElement
+          );
+        }
+
+        function cloneItemForUndo(item) {
+          return {
+            body: item.body,
+            is_open: item.is_open === true,
+            is_favorite: item.is_favorite === true,
+            children: Array.isArray(item.children)
+              ? item.children.map((child) => cloneItemForUndo(child))
+              : []
+          };
+        }
+
+        async function restoreDeletedItemForUndo(snapshotItem, parentUUID, index) {
+          const created = parentUUID === ""
+            ? await createRootItem()
+            : await createChildItem(parentUUID);
+          const createdUUID = created.uuid;
+
+          if (snapshotItem.body !== "") {
+            await saveItemBody(createdUUID, snapshotItem.body);
+          }
+          if (snapshotItem.is_favorite === true) {
+            await saveItemFavoriteState(createdUUID, true);
+          }
+          await moveItemToPosition(createdUUID, parentUUID, index);
+
+          for (let childIndex = 0; childIndex < snapshotItem.children.length; childIndex += 1) {
+            await restoreDeletedItemForUndo(snapshotItem.children[childIndex], createdUUID, childIndex);
+          }
+
+          if (snapshotItem.is_open === false) {
+            await saveItemOpenState(createdUUID, false);
+          }
+
+          return createdUUID;
+        }
+
         async function deleteSelectedItems(selectedUUIDs) {
           const focusUUID = fallbackFocusUUIDAfterDelete(selectedUUIDs);
-          const deleteTargets = selectionRootUUIDsInVisibleOrder(selectedUUIDs).reverse();
+          const rootTargets = selectionRootUUIDsInVisibleOrder(selectedUUIDs);
+          const deletedSnapshots = rootTargets.map((uuid, order) => {
+            const location = requireItemLocation(uuid);
+            return {
+              order,
+              parentUUID: location.parentItem ? location.parentItem.uuid : "",
+              parentWasOpen: location.parentItem ? location.parentItem.is_open === true : true,
+              index: location.index,
+              item: cloneItemForUndo(location.item)
+            };
+          });
+          const deleteTargets = rootTargets.slice().reverse();
           for (const uuid of deleteTargets) {
             await deleteItem(uuid);
+          }
+
+          if (!applyingUndo && deletedSnapshots.length > 0) {
+            pushUndoAction({
+              focusUUID: "",
+              apply: async () => {
+                const orderedSnapshots = deletedSnapshots.slice().sort((left, right) => {
+                  if (left.parentUUID === right.parentUUID) {
+                    return left.index - right.index;
+                  }
+                  return left.order - right.order;
+                });
+                const parentOpenState = new Map();
+                for (const snapshot of orderedSnapshots) {
+                  if (snapshot.parentUUID !== "" && snapshot.parentWasOpen === false) {
+                    parentOpenState.set(snapshot.parentUUID, false);
+                  }
+                  await restoreDeletedItemForUndo(snapshot.item, snapshot.parentUUID, snapshot.index);
+                }
+                for (const [parentUUID, isOpen] of parentOpenState.entries()) {
+                  await saveItemOpenState(parentUUID, isOpen);
+                }
+              }
+            });
           }
 
           keyboardRangeAnchorUUID = "";
@@ -2265,7 +2404,8 @@
           }
 
           body.addEventListener("focus", () => {
-            setSelectedItem(item.uuid);
+            const preserveDragSelection = dragSelectedItemUUIDs.size > 0;
+            setSelectedItem(item.uuid, preserveDragSelection);
             suppressFocusChrome(body);
           });
 
@@ -2458,7 +2598,13 @@
               return;
             }
 
-            if (hasMultipleSelection && event.key === "Backspace" && !event.altKey && !event.ctrlKey && !event.metaKey) {
+            if (
+              hasMultipleSelection &&
+              (event.key === "Backspace" || event.key === "Delete") &&
+              !event.altKey &&
+              !event.ctrlKey &&
+              !event.metaKey
+            ) {
               event.preventDefault();
               body.contentEditable = "false";
               body.classList.remove("editing");
@@ -2718,34 +2864,6 @@
             const row = document.createElement("div");
             row.className = "item-row";
             row.dataset.uuid = item.uuid;
-            row.addEventListener("mousedown", (event) => {
-              if (event.button !== 0) {
-                return;
-              }
-              if (!(event.target instanceof Element)) {
-                return;
-              }
-              if (event.target.closest(".item-controls")) {
-                return;
-              }
-              if (event.target.closest(".item-mobile-move")) {
-                return;
-              }
-              if (event.target.closest(".item-body.editing")) {
-                return;
-              }
-              keyboardRangeAnchorUUID = "";
-              clearDragSelection();
-              dragSelectionActive = true;
-              setSelectedItem(item.uuid);
-              addDragSelectionItem(item.uuid);
-            });
-            row.addEventListener("mouseenter", () => {
-              if (!dragSelectionActive) {
-                return;
-              }
-              addDragSelectionItem(item.uuid);
-            });
 
             const controls = document.createElement("div");
             controls.className = "item-controls";
@@ -3378,10 +3496,50 @@
           if (event.altKey || event.ctrlKey || event.metaKey) {
             return;
           }
-          if (event.key !== "Backspace" && event.key !== "Tab") {
+          if (event.shiftKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+            if (isFormFieldEventTarget(event.target)) {
+              return;
+            }
+
+            const visibleUUIDList = visibleItemUUIDs();
+            if (visibleUUIDList.length === 0) {
+              return;
+            }
+
+            event.preventDefault();
+            dragSelectionActive = false;
+            dragSelectionAnchorUUID = "";
+
+            let activeUUID = selectedItemUUID;
+            if (!visibleUUIDList.includes(activeUUID)) {
+              activeUUID = "";
+            }
+            if (activeUUID === "") {
+              activeUUID = event.key === "ArrowUp"
+                ? visibleUUIDList[visibleUUIDList.length - 1]
+                : visibleUUIDList[0];
+            }
+
+            if (activeUUID === "") {
+              return;
+            }
+
+            if (keyboardRangeAnchorUUID === "" || !visibleUUIDList.includes(keyboardRangeAnchorUUID)) {
+              keyboardRangeAnchorUUID = activeUUID;
+            }
+
+            const direction = event.key === "ArrowUp" ? -1 : 1;
+            const adjacentUUID = adjacentItemUUID(activeUUID, direction);
+            const targetUUID = adjacentUUID || activeUUID;
+            setSelectedItem(targetUUID, true);
+            setRangeSelectionByVisibleOrder(keyboardRangeAnchorUUID, targetUUID);
             return;
           }
-          if (isEditableEventTarget(event.target)) {
+
+          if (event.key !== "Backspace" && event.key !== "Delete" && event.key !== "Tab") {
+            return;
+          }
+          if (isFormFieldEventTarget(event.target)) {
             return;
           }
 
@@ -3404,12 +3562,14 @@
             try {
               if (event.key === "Backspace") {
                 await deleteSelectedItems(selectedUUIDs);
+              } else if (event.key === "Delete") {
+                await deleteSelectedItems(selectedUUIDs);
               } else {
                 await moveSelectedItems(selectedUUIDs, event.shiftKey, selectedUUIDs[0]);
               }
               clearError();
             } catch (error) {
-              if (event.key === "Backspace") {
+              if (event.key === "Backspace" || event.key === "Delete") {
                 showError(`Unable to delete items: ${String(error)}`);
               } else {
                 showError(`Unable to move selected items: ${String(error)}`);
@@ -3425,6 +3585,32 @@
           closeAllToolMenus();
           closeThemeMenu();
         });
+        if (rootEl) {
+          rootEl.addEventListener("mousedown", (event) => {
+            if (event.button !== 0) {
+              return;
+            }
+            if (!(event.target instanceof Element)) {
+              return;
+            }
+            if (event.target.closest(".item-controls")) {
+              return;
+            }
+            if (event.target.closest(".item-mobile-move")) {
+              return;
+            }
+            if (event.target.closest(".item-tool-menu")) {
+              return;
+            }
+            if (event.target.closest(".item-body.editing")) {
+              return;
+            }
+            if (event.target.closest("button, a, input, select, textarea")) {
+              return;
+            }
+            startDragSelectionAtClientY(event.clientY);
+          });
+        }
         window.addEventListener("beforeunload", (event) => {
           if (!hasUnsavedChanges()) {
             return;
@@ -3436,11 +3622,23 @@
         window.addEventListener("popstate", () => {
           void loadOutline();
         });
+        window.addEventListener("mousemove", (event) => {
+          if (!dragSelectionActive) {
+            return;
+          }
+          if ((event.buttons & 1) === 0) {
+            dragSelectionActive = false;
+            dragSelectionAnchorUUID = "";
+            return;
+          }
+          updateDragSelectionAtClientY(event.clientY);
+        });
         window.addEventListener("mouseup", () => {
           if (!dragSelectionActive) {
             return;
           }
           dragSelectionActive = false;
+          dragSelectionAnchorUUID = "";
         });
 
         initThemeControls();
