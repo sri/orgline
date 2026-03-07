@@ -1121,12 +1121,6 @@
         display: none;
       }
 
-      .debug-json-panel-header {
-        display: flex;
-        justify-content: flex-end;
-        margin: 0 0 0.24rem 0;
-      }
-
       .debug-json-copy-btn {
         height: 1.2rem;
         padding: 0 0.42rem;
@@ -1160,6 +1154,39 @@
         cursor: text;
         user-select: text;
         -webkit-user-select: text;
+      }
+
+      .debug-json-panel-footer {
+        margin: 0.3rem 0 0 0;
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.28rem;
+      }
+
+      .debug-json-apply-btn {
+        height: 1.25rem;
+        padding: 0 0.48rem;
+        border-radius: 5px;
+        border: 1px solid var(--debug-action-border);
+        background: var(--debug-action-bg);
+        color: var(--debug-action-text);
+        font-size: 0.68rem;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .debug-json-apply-btn:hover {
+        background: color-mix(in srgb, var(--debug-action-bg) 82%, #000000 18%);
+      }
+
+      .debug-json-apply-btn:focus-visible {
+        outline: 1px solid var(--debug-action-border);
+        outline-offset: 0;
+      }
+
+      .debug-json-apply-btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
       }
 
       @media (max-width: 720px) {
@@ -1313,15 +1340,6 @@
           >×</button>
         </div>
         <div id="debug-json-panel" class="debug-json-panel" hidden>
-          <div class="debug-json-panel-header">
-            <button
-              id="debug-json-copy-btn"
-              class="debug-json-copy-btn"
-              type="button"
-              title="copy state to clipboard"
-              aria-label="copy state to clipboard"
-            >copy state to clipboard</button>
-          </div>
           <pre
             id="debug-json-viewer"
             class="debug-json-viewer"
@@ -1329,6 +1347,23 @@
             spellcheck="false"
             aria-label="Debug JSON state"
           ></pre>
+          <div class="debug-json-panel-footer">
+            <button
+              id="debug-json-copy-btn"
+              class="debug-json-copy-btn"
+              type="button"
+              title="copy state to clipboard"
+              aria-label="copy state to clipboard"
+            >copy state to clipboard</button>
+            <button
+              id="debug-json-apply-btn"
+              class="debug-json-apply-btn"
+              type="button"
+              title="Apply edited state"
+              aria-label="Apply edited state"
+              disabled
+            >apply state</button>
+          </div>
         </div>
       </main>
     </div>
@@ -1358,6 +1393,7 @@
         const debugJSONPanelEl = document.getElementById("debug-json-panel");
         const debugJSONViewerEl = document.getElementById("debug-json-viewer");
         const debugJSONCopyBtnEl = document.getElementById("debug-json-copy-btn");
+        const debugJSONApplyBtnEl = document.getElementById("debug-json-apply-btn");
         const themeStorageKey = "orgline-theme";
         const debugModeStorageKey = "orgline-debug-mode-v1";
         const debugThemeCycleSecondsStorageKey = "orgline-debug-theme-cycle-seconds-v1";
@@ -1407,6 +1443,7 @@
         let debugThemeCycleCountdownSeconds = Math.max(1, Math.round(defaultDebugThemeCycleDelayMs / 1000));
         let debugThemeCycleOriginalThemeID = "";
         let debugThemeCycleNextThemeIndex = 0;
+        let debugStateOriginalText = "";
 
         const themes = [
           { id: "default", label: "default" },
@@ -1598,6 +1635,74 @@
             return;
           }
           debugJSONPanelEl.hidden = true;
+        }
+
+        function setDebugStateDirty(isDirty) {
+          if (!(debugJSONApplyBtnEl instanceof HTMLButtonElement)) {
+            return;
+          }
+          debugJSONApplyBtnEl.disabled = !isDirty;
+        }
+
+        function debugJSONText() {
+          if (!(debugJSONViewerEl instanceof HTMLElement)) {
+            return "";
+          }
+          return typeof debugJSONViewerEl.textContent === "string" ? debugJSONViewerEl.textContent : "";
+        }
+
+        function openDebugJSONPanel() {
+          if (!(debugJSONPanelEl instanceof HTMLElement) || !(debugJSONViewerEl instanceof HTMLElement)) {
+            return;
+          }
+          const payload = buildDebugStatePayload();
+          const text = JSON.stringify(payload, null, 2);
+          debugJSONViewerEl.textContent = text;
+          debugStateOriginalText = text;
+          setDebugStateDirty(false);
+          debugJSONPanelEl.hidden = false;
+        }
+
+        function extractRawItemsFromDebugStatePayload(payload) {
+          if (Array.isArray(payload)) {
+            return payload;
+          }
+          if (payload && typeof payload === "object" && Array.isArray(payload.items)) {
+            return payload.items;
+          }
+          throw new Error("State must be an array or an object with an 'items' array.");
+        }
+
+        function applyDebugStateFromText(text) {
+          const rawText = typeof text === "string" ? text.trim() : "";
+          if (rawText === "") {
+            throw new Error("State JSON is empty.");
+          }
+
+          let parsed = null;
+          try {
+            parsed = JSON.parse(rawText);
+          } catch (error) {
+            throw new Error(`Invalid JSON: ${String(error)}`);
+          }
+
+          const rawItems = extractRawItemsFromDebugStatePayload(parsed);
+          const seenUUIDs = new Set();
+          const normalizedItems = rawItems
+            .map((rawItem) => normalizeLocalStorageItem(rawItem, seenUUIDs))
+            .filter((item) => item !== null);
+
+          outlineItems = normalizedItems;
+          if (localMode) {
+            localItems = normalizedItems;
+            localItemsInitialized = true;
+            persistLocalItemsToStorage();
+          }
+
+          setSelectedItem("");
+          renderOutline();
+          clearError();
+          return JSON.stringify(buildDebugStatePayload(), null, 2);
         }
 
         function renderDebugThemeCycleButton() {
@@ -1868,9 +1973,11 @@
                 debugJSONPanelEl.hidden = true;
                 return;
               }
-              const payload = buildDebugStatePayload();
-              debugJSONViewerEl.textContent = JSON.stringify(payload, null, 2);
-              debugJSONPanelEl.hidden = false;
+              openDebugJSONPanel();
+            });
+
+            debugJSONViewerEl.addEventListener("input", () => {
+              setDebugStateDirty(debugJSONText() !== debugStateOriginalText);
             });
           }
 
@@ -1888,6 +1995,26 @@
                   showError("Unable to copy state to clipboard.");
                 }
               })();
+            });
+          }
+
+          if (debugJSONApplyBtnEl instanceof HTMLButtonElement) {
+            debugJSONApplyBtnEl.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (debugJSONApplyBtnEl.disabled) {
+                return;
+              }
+              try {
+                const canonical = applyDebugStateFromText(debugJSONText());
+                if (debugJSONViewerEl instanceof HTMLElement) {
+                  debugJSONViewerEl.textContent = canonical;
+                }
+                debugStateOriginalText = canonical;
+                setDebugStateDirty(false);
+              } catch (error) {
+                showError(String(error));
+              }
             });
           }
         }
