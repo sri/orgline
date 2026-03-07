@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PORT="${1:-8080}"
+
+if ! [[ "$PORT" =~ ^[0-9]+$ ]]; then
+  echo "error: port must be numeric" >&2
+  exit 1
+fi
+
+pids=()
+while IFS= read -r pid; do
+  [[ -n "$pid" ]] && pids+=("$pid")
+done < <(lsof -ti "tcp:${PORT}" -sTCP:LISTEN 2>/dev/null || true)
+
+if [[ "${#pids[@]}" -eq 0 ]]; then
+  echo "no dev process listening on port ${PORT}"
+  exit 0
+fi
+
+echo "stopping process(es) on port ${PORT}: ${pids[*]}"
+kill "${pids[@]}" 2>/dev/null || true
+
+sleep 0.4
+
+remaining=()
+while IFS= read -r pid; do
+  [[ -n "$pid" ]] && remaining+=("$pid")
+done < <(lsof -ti "tcp:${PORT}" -sTCP:LISTEN 2>/dev/null || true)
+if [[ "${#remaining[@]}" -gt 0 ]]; then
+  echo "forcing stop for remaining process(es): ${remaining[*]}"
+  kill -9 "${remaining[@]}"
+fi
+
+echo "port ${PORT} is clear"
