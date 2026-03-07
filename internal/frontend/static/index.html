@@ -52,6 +52,16 @@
         --message-error-bg: #efb2bb;
         --message-error-border: #b74255;
         --message-error-text: #4e1320;
+        --debug-bg: #f8d9df;
+        --debug-border: #b54b62;
+        --debug-text: #4d1320;
+        --debug-action-bg: #f3c0cb;
+        --debug-action-border: #a63d56;
+        --debug-action-text: #4d1320;
+        --debug-close-bg: #cc3d59;
+        --debug-close-border: #9e1f39;
+        --debug-close-text: #fff7fa;
+        --debug-panel-bg: #f9e3e8;
       }
 
       :root[data-theme="default"] {
@@ -103,6 +113,16 @@
         --message-error-bg: #5a2731;
         --message-error-border: #ff6f87;
         --message-error-text: #ffd2dc;
+        --debug-bg: #4a1f2a;
+        --debug-border: #a64a62;
+        --debug-text: #ffd3dc;
+        --debug-action-bg: #5a2734;
+        --debug-action-border: #b95b73;
+        --debug-action-text: #ffdbe3;
+        --debug-close-bg: #cf5571;
+        --debug-close-border: #ff7f9c;
+        --debug-close-text: #19070d;
+        --debug-panel-bg: #3b1a24;
       }
 
       :root[data-theme="matrix"] {
@@ -150,6 +170,16 @@
         --message-error-bg: #4a1d28;
         --message-error-border: #ff6b8c;
         --message-error-text: #ffd1dd;
+        --debug-bg: #3f1724;
+        --debug-border: #a74a66;
+        --debug-text: #ffd4df;
+        --debug-action-bg: #4c1e2d;
+        --debug-action-border: #bb5c7a;
+        --debug-action-text: #ffe0e8;
+        --debug-close-bg: #d3597b;
+        --debug-close-border: #ff83a3;
+        --debug-close-text: #1a0710;
+        --debug-panel-bg: #351320;
       }
 
       :root[data-theme="ocean"] {
@@ -197,6 +227,16 @@
         --message-error-bg: #f6b4c1;
         --message-error-border: #bd4461;
         --message-error-text: #5b1525;
+        --debug-bg: #f8ddd5;
+        --debug-border: #c96b58;
+        --debug-text: #5e271a;
+        --debug-action-bg: #f4c3b8;
+        --debug-action-border: #bb5b48;
+        --debug-action-text: #5e271a;
+        --debug-close-bg: #d45743;
+        --debug-close-border: #a53a2a;
+        --debug-close-text: #fff8f5;
+        --debug-panel-bg: #fbe8e2;
       }
 
       :root[data-theme="solar"] {
@@ -244,6 +284,16 @@
         --message-error-bg: #eaa6b0;
         --message-error-border: #ae364f;
         --message-error-text: #49111f;
+        --debug-bg: #f6ddd4;
+        --debug-border: #bd6d53;
+        --debug-text: #5a2b1c;
+        --debug-action-bg: #f1c4b6;
+        --debug-action-border: #aa5a42;
+        --debug-action-text: #5a2b1c;
+        --debug-close-bg: #ca5438;
+        --debug-close-border: #9b3b26;
+        --debug-close-text: #fff8f3;
+        --debug-panel-bg: #fae8df;
       }
 
       :root[data-theme="graphite"] {
@@ -291,6 +341,16 @@
         --message-error-bg: #673242;
         --message-error-border: #ff8ea4;
         --message-error-text: #ffd9e1;
+        --debug-bg: #4d232d;
+        --debug-border: #b35a71;
+        --debug-text: #ffd8e1;
+        --debug-action-bg: #5a2b36;
+        --debug-action-border: #c26b82;
+        --debug-action-text: #ffe1e8;
+        --debug-close-bg: #d05e78;
+        --debug-close-border: #f188a3;
+        --debug-close-text: #1a0a10;
+        --debug-panel-bg: #401d27;
       }
 
       body {
@@ -980,6 +1040,128 @@
         text-decoration: underline;
       }
 
+      .debug-toolbar {
+        margin: 0.9rem 0 0 0;
+        padding: 0.35rem 0.45rem;
+        border-radius: 8px;
+        border: 1px solid var(--debug-border);
+        background: var(--debug-bg);
+        color: var(--debug-text);
+        display: flex;
+        width: 100%;
+        box-sizing: border-box;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 0.45rem;
+        font-size: 0.74rem;
+        line-height: 1.2;
+        position: sticky;
+        bottom: 0.25rem;
+        z-index: 150;
+      }
+
+      .debug-toolbar[hidden] {
+        display: none;
+      }
+
+      .debug-toolbar-close {
+        margin-left: auto;
+        width: 1.35rem;
+        height: 1.35rem;
+        padding: 0;
+        border-radius: 999px;
+        border: 1px solid var(--debug-close-border);
+        background: var(--debug-close-bg);
+        color: var(--debug-close-text);
+        font-size: 0.82rem;
+        font-weight: 700;
+        line-height: 1;
+        cursor: pointer;
+      }
+
+      .debug-toolbar-close:hover {
+        background: color-mix(in srgb, var(--debug-close-bg) 82%, #000000 18%);
+      }
+
+      .debug-toolbar-close:focus-visible {
+        outline: 1px solid var(--debug-close-border);
+        outline-offset: 0;
+      }
+
+      .debug-toolbar-action {
+        height: 1.35rem;
+        padding: 0 0.45rem;
+        border-radius: 5px;
+        border: 1px solid var(--debug-action-border);
+        background: var(--debug-action-bg);
+        color: var(--debug-action-text);
+        font-size: 0.72rem;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .debug-toolbar-action:hover {
+        background: color-mix(in srgb, var(--debug-action-bg) 82%, #000000 18%);
+      }
+
+      .debug-toolbar-action:focus-visible {
+        outline: 1px solid var(--debug-action-border);
+        outline-offset: 0;
+      }
+
+      .debug-json-panel {
+        margin: 0.35rem 0 0 0;
+        padding: 0.36rem;
+        border-radius: 8px;
+        border: 1px solid var(--debug-action-border);
+        background: var(--debug-panel-bg);
+      }
+
+      .debug-json-panel[hidden] {
+        display: none;
+      }
+
+      .debug-json-panel-header {
+        display: flex;
+        justify-content: flex-end;
+        margin: 0 0 0.24rem 0;
+      }
+
+      .debug-json-copy-btn {
+        height: 1.2rem;
+        padding: 0 0.42rem;
+        border-radius: 5px;
+        border: 1px solid var(--debug-action-border);
+        background: var(--debug-action-bg);
+        color: var(--debug-action-text);
+        font-size: 0.68rem;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .debug-json-copy-btn:hover {
+        background: color-mix(in srgb, var(--debug-action-bg) 82%, #000000 18%);
+      }
+
+      .debug-json-copy-btn:focus-visible {
+        outline: 1px solid var(--debug-action-border);
+        outline-offset: 0;
+      }
+
+      .debug-json-viewer {
+        margin: 0;
+        color: var(--debug-text);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.7rem;
+        line-height: 1.35;
+        white-space: pre-wrap;
+        overflow: auto;
+        max-height: 18rem;
+        cursor: text;
+        user-select: text;
+        -webkit-user-select: text;
+      }
+
       @media (max-width: 720px) {
         .outline-toolbar {
           flex-wrap: nowrap;
@@ -1100,6 +1282,47 @@
         </div>
         <div id="outline-root"></div>
         <p id="outline-error" class="error" hidden></p>
+        <div id="debug-toolbar" class="debug-toolbar" hidden>
+          <button
+            id="debug-toolbar-errors-btn"
+            class="debug-toolbar-action"
+            type="button"
+            title="Generate a test message"
+            aria-label="Generate a test message"
+          >Errors</button>
+          <button
+            id="debug-toolbar-state-btn"
+            class="debug-toolbar-action"
+            type="button"
+            title="Show current JSON state"
+            aria-label="Show current JSON state"
+          >State</button>
+          <button
+            id="debug-toolbar-close-btn"
+            class="debug-toolbar-close"
+            type="button"
+            title="Turn debug mode off"
+            aria-label="Turn debug mode off"
+          >×</button>
+        </div>
+        <div id="debug-json-panel" class="debug-json-panel" hidden>
+          <div class="debug-json-panel-header">
+            <button
+              id="debug-json-copy-btn"
+              class="debug-json-copy-btn"
+              type="button"
+              title="copy state to clipboard"
+              aria-label="copy state to clipboard"
+            >copy state to clipboard</button>
+          </div>
+          <pre
+            id="debug-json-viewer"
+            class="debug-json-viewer"
+            contenteditable="true"
+            spellcheck="false"
+            aria-label="Debug JSON state"
+          ></pre>
+        </div>
       </main>
     </div>
     <script>
@@ -1120,16 +1343,26 @@
         const themeMenuTriggerEl = document.getElementById("theme-menu-trigger");
         const themeMenuEl = document.getElementById("theme-menu");
         const searchInputEl = document.getElementById("outline-search");
+        const debugToolbarEl = document.getElementById("debug-toolbar");
+        const debugToolbarCloseBtnEl = document.getElementById("debug-toolbar-close-btn");
+        const debugToolbarErrorsBtnEl = document.getElementById("debug-toolbar-errors-btn");
+        const debugToolbarStateBtnEl = document.getElementById("debug-toolbar-state-btn");
+        const debugJSONPanelEl = document.getElementById("debug-json-panel");
+        const debugJSONViewerEl = document.getElementById("debug-json-viewer");
+        const debugJSONCopyBtnEl = document.getElementById("debug-json-copy-btn");
         const themeStorageKey = "orgline-theme";
+        const debugModeStorageKey = "orgline-debug-mode-v1";
         const localItemsStorageKey = "orgline-items-v1";
         const messageDismissalsStorageKey = "orgline-message-dismissals-v1";
         const localModeMessageID = "local-mode-warning";
         const zoomQueryParam = "item_id";
+        const debugQueryParam = "debug";
         const searchMinChars = 2;
         let localMode = (() => {
           const value = (new URLSearchParams(window.location.search).get("local") || "").trim().toLowerCase();
           return value === "true" || value === "1" || value === "yes";
         })();
+        let debugModeEnabled = false;
 
         let outlineItems = [];
         let localItems = [];
@@ -1154,6 +1387,7 @@
         let stackMessageCounter = 0;
         const stackMessages = [];
         let messageDismissals = {};
+        let debugMessageSequence = 0;
 
         const themes = [
           { id: "default", label: "default" },
@@ -1228,6 +1462,7 @@
             const willOpen = themeMenuEl.hidden;
             closeAllToolMenus();
             closeMessageStackMenu();
+            closeDebugJSONPanel();
             themeMenuEl.hidden = !willOpen;
             themeMenuTriggerEl.setAttribute("aria-expanded", willOpen ? "true" : "false");
           });
@@ -1242,6 +1477,219 @@
             storedTheme = "default";
           }
           applyTheme(storedTheme);
+        }
+
+        function parseBooleanQueryValue(value) {
+          const normalized = typeof value === "string" ? value.trim().toLowerCase() : "";
+          if (normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on") {
+            return true;
+          }
+          if (normalized === "false" || normalized === "0" || normalized === "no" || normalized === "off") {
+            return false;
+          }
+          return null;
+        }
+
+        function debugModeFromQuery() {
+          const raw = new URLSearchParams(window.location.search).get(debugQueryParam);
+          return parseBooleanQueryValue(raw);
+        }
+
+        function isLocalDebugHost() {
+          const hostname = typeof window.location.hostname === "string"
+            ? window.location.hostname.trim().toLowerCase()
+            : "";
+          return (
+            hostname === "localhost" ||
+            hostname === "127.0.0.1" ||
+            hostname === "::1" ||
+            hostname.endsWith(".local")
+          );
+        }
+
+        function loadStoredDebugMode() {
+          try {
+            return parseBooleanQueryValue(localStorage.getItem(debugModeStorageKey));
+          } catch (_error) {
+            return null;
+          }
+        }
+
+        function persistDebugMode(enabled) {
+          try {
+            localStorage.setItem(debugModeStorageKey, enabled ? "true" : "false");
+          } catch (_error) {
+            // Best effort only.
+          }
+        }
+
+        function renderDebugToolbar() {
+          if (!(debugToolbarEl instanceof HTMLElement)) {
+            return;
+          }
+
+          debugToolbarEl.hidden = !debugModeEnabled;
+          if (debugToolbarEl.hidden) {
+            closeDebugJSONPanel();
+            return;
+          }
+        }
+
+        function closeDebugJSONPanel() {
+          if (!(debugJSONPanelEl instanceof HTMLElement)) {
+            return;
+          }
+          debugJSONPanelEl.hidden = true;
+        }
+
+        function buildDebugStatePayload() {
+          if (localMode) {
+            let rawLocal = null;
+            try {
+              rawLocal = localStorage.getItem(localItemsStorageKey);
+            } catch (_error) {
+              rawLocal = null;
+            }
+            if (typeof rawLocal === "string" && rawLocal.trim() !== "") {
+              try {
+                return JSON.parse(rawLocal);
+              } catch (_error) {
+                return { local_mode: true, source: "localStorage", parse_error: true, raw: rawLocal };
+              }
+            }
+            return { local_mode: true, source: "localStorage", items: [] };
+          }
+
+          return {
+            local_mode: false,
+            source: "memory:outlineItems",
+            items: outlineItems
+          };
+        }
+
+        async function copyTextToClipboard(text) {
+          if (typeof text !== "string" || text === "") {
+            return false;
+          }
+
+          if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+            try {
+              await navigator.clipboard.writeText(text);
+              return true;
+            } catch (_error) {
+              // Fall through to selection-based copy.
+            }
+          }
+
+          try {
+            const textarea = document.createElement("textarea");
+            textarea.value = text;
+            textarea.setAttribute("readonly", "");
+            textarea.style.position = "fixed";
+            textarea.style.left = "-9999px";
+            textarea.style.top = "0";
+            document.body.appendChild(textarea);
+            textarea.select();
+            textarea.setSelectionRange(0, textarea.value.length);
+            const copied = document.execCommand("copy");
+            document.body.removeChild(textarea);
+            return copied;
+          } catch (_error) {
+            return false;
+          }
+        }
+
+        function setDebugMode(enabled, options = {}) {
+          debugModeEnabled = enabled === true;
+          if (options.persist !== false) {
+            persistDebugMode(debugModeEnabled);
+          }
+          renderDebugToolbar();
+        }
+
+        function resolveInitialDebugMode() {
+          const queryValue = debugModeFromQuery();
+          if (queryValue !== null) {
+            persistDebugMode(queryValue);
+            return queryValue;
+          }
+
+          const storedValue = loadStoredDebugMode();
+          if (storedValue !== null) {
+            return storedValue;
+          }
+
+          return isLocalDebugHost();
+        }
+
+        function syncDebugModeFromURL() {
+          const queryValue = debugModeFromQuery();
+          if (queryValue === null) {
+            return;
+          }
+          setDebugMode(queryValue, { persist: true });
+        }
+
+        function initDebugToolbar() {
+          debugModeEnabled = resolveInitialDebugMode();
+          renderDebugToolbar();
+
+          if (debugToolbarCloseBtnEl instanceof HTMLButtonElement) {
+            debugToolbarCloseBtnEl.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setDebugMode(false, { persist: true });
+            });
+          }
+
+          if (debugToolbarErrorsBtnEl instanceof HTMLButtonElement) {
+            debugToolbarErrorsBtnEl.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              debugMessageSequence += 1;
+              const level = debugMessageSequence % 2 === 1 ? "warning" : "error";
+              const label = level === "warning" ? "Debug warning" : "Debug error";
+              const timestamp = new Date().toLocaleTimeString();
+              pushStackMessage(level, `${label} #${debugMessageSequence} (${timestamp})`, {
+                dismissible: true
+              });
+            });
+          }
+
+          if (
+            debugToolbarStateBtnEl instanceof HTMLButtonElement &&
+            debugJSONPanelEl instanceof HTMLElement &&
+            debugJSONViewerEl instanceof HTMLElement
+          ) {
+            debugToolbarStateBtnEl.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (!debugJSONPanelEl.hidden) {
+                debugJSONPanelEl.hidden = true;
+                return;
+              }
+              const payload = buildDebugStatePayload();
+              debugJSONViewerEl.textContent = JSON.stringify(payload, null, 2);
+              debugJSONPanelEl.hidden = false;
+            });
+          }
+
+          if (debugJSONCopyBtnEl instanceof HTMLButtonElement) {
+            debugJSONCopyBtnEl.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void (async () => {
+                const rawText = debugJSONViewerEl instanceof HTMLElement ? debugJSONViewerEl.textContent : "";
+                const text = rawText && rawText.trim() !== ""
+                  ? rawText
+                  : JSON.stringify(buildDebugStatePayload(), null, 2);
+                const copied = await copyTextToClipboard(text);
+                if (!copied) {
+                  showError("Unable to copy state to clipboard.");
+                }
+              })();
+            });
+          }
         }
 
         function loadMessageDismissals() {
@@ -1522,6 +1970,7 @@
             const willOpen = messageStackMenuEl.hidden;
             closeAllToolMenus();
             closeThemeMenu();
+            closeDebugJSONPanel();
             messageStackMenuEl.hidden = !willOpen;
             messageStackTriggerEl.setAttribute("aria-expanded", willOpen ? "true" : "false");
           });
@@ -2536,7 +2985,8 @@
           return (
             target instanceof HTMLInputElement ||
             target instanceof HTMLTextAreaElement ||
-            target instanceof HTMLSelectElement
+            target instanceof HTMLSelectElement ||
+            target.closest("[contenteditable=\"true\"]") !== null
           );
         }
 
@@ -4228,10 +4678,18 @@
           })();
         });
 
-        document.addEventListener("click", () => {
+        document.addEventListener("click", (event) => {
+          const clickTarget = event.target instanceof Element ? event.target : null;
           closeAllToolMenus();
           closeThemeMenu();
           closeMessageStackMenu();
+          if (
+            clickTarget &&
+            (clickTarget.closest("#debug-json-panel") || clickTarget.closest("#debug-toolbar-state-btn"))
+          ) {
+            return;
+          }
+          closeDebugJSONPanel();
         });
         if (rootEl) {
           rootEl.addEventListener("mousedown", (event) => {
@@ -4268,6 +4726,7 @@
           event.returnValue = "";
         });
         window.addEventListener("popstate", () => {
+          syncDebugModeFromURL();
           void loadOutline();
         });
         window.addEventListener("mousemove", (event) => {
@@ -4289,6 +4748,7 @@
           dragSelectionAnchorUUID = "";
         });
 
+        initDebugToolbar();
         initThemeControls();
         initMessageStackControls();
         initDevAutoReload();
