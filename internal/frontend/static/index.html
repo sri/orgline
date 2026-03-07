@@ -999,6 +999,16 @@
           display: none;
         }
 
+        .message-stack-menu {
+          position: fixed;
+          top: calc(env(safe-area-inset-top, 0px) + 3rem);
+          left: 50%;
+          right: auto;
+          transform: translateX(-50%);
+          width: min(24rem, calc(100vw - 0.8rem));
+          max-height: min(18rem, calc(100vh - 4.2rem));
+        }
+
         .toolbar-right {
           width: auto;
           margin-left: auto;
