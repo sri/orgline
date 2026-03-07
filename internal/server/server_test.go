@@ -1241,6 +1241,10 @@ func setupTestDB(t *testing.T) *sql.DB {
 		_ = db.Close()
 		t.Fatalf("run migrations: %v", err)
 	}
+	if err := seedTestWorkflowItems(ctx, db); err != nil {
+		_ = db.Close()
+		t.Fatalf("seed test workflow items: %v", err)
+	}
 
 	t.Cleanup(func() {
 		if err := db.Close(); err != nil {
@@ -1249,4 +1253,34 @@ func setupTestDB(t *testing.T) *sql.DB {
 	})
 
 	return db
+}
+
+func seedTestWorkflowItems(ctx context.Context, db *sql.DB) error {
+	const seedStatement = `
+INSERT OR IGNORE INTO workflow_items (
+    uuid,
+    parent_uuid,
+    child_order,
+    body,
+    created_at,
+    updated_at
+) VALUES
+    ('11111111-1111-1111-1111-111111111111', NULL, 1, 'Q1 Company Planning', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('11111111-1111-1111-1111-111111111112', '11111111-1111-1111-1111-111111111111', 1, 'Finalize hiring plan', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('11111111-1111-1111-1111-111111111113', '11111111-1111-1111-1111-111111111111', 2, 'Confirm budget assumptions', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('11111111-1111-1111-1111-111111111114', '11111111-1111-1111-1111-111111111113', 1, 'Review Finance notes', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('11111111-1111-1111-1111-111111111115', '11111111-1111-1111-1111-111111111113', 2, 'Publish approved budget', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('22222222-2222-2222-2222-222222222221', NULL, 2, 'Product Launch Checklist', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('22222222-2222-2222-2222-222222222222', '22222222-2222-2222-2222-222222222221', 1, 'Ship onboarding flow', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('22222222-2222-2222-2222-222222222223', '22222222-2222-2222-2222-222222222221', 2, 'QA regression pass', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('22222222-2222-2222-2222-222222222224', '22222222-2222-2222-2222-222222222223', 1, 'Close critical bugs', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+    ('22222222-2222-2222-2222-222222222225', '22222222-2222-2222-2222-222222222223', 2, 'Verify release notes', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+`
+
+	_, err := db.ExecContext(ctx, seedStatement)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
