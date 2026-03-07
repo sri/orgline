@@ -895,9 +895,10 @@
         const themeMenuEl = document.getElementById("theme-menu");
         const searchInputEl = document.getElementById("outline-search");
         const themeStorageKey = "orgline-theme";
+        const localItemsStorageKey = "orgline-items-v1";
         const zoomQueryParam = "item_id";
         const searchMinChars = 2;
-        const localMode = (() => {
+        let localMode = (() => {
           const value = (new URLSearchParams(window.location.search).get("local") || "").trim().toLowerCase();
           return value === "true" || value === "1" || value === "yes";
         })();
@@ -1154,18 +1155,120 @@
 
           const root2 = createLocalItem("Local Mode");
           const root2Child1 = createLocalItem("No backend requests in ?local=true");
-          const root2Child2 = createLocalItem("Reload clears local data");
+          const root2Child2 = createLocalItem("Reload keeps local data");
           root2.children.push(root2Child1, root2Child2);
 
           return [root1, root2];
+        }
+
+        function cloneLocalStorageItem(item) {
+          return {
+            uuid: item.uuid,
+            created_at: item.created_at,
+            updated_at: item.updated_at,
+            body: item.body,
+            is_open: item.is_open === true,
+            is_favorite: item.is_favorite === true,
+            children: Array.isArray(item.children) ? item.children.map((child) => cloneLocalStorageItem(child)) : []
+          };
+        }
+
+        function normalizeLocalStorageItem(rawItem, seenUUIDs) {
+          if (!rawItem || typeof rawItem !== "object") {
+            return null;
+          }
+
+          const timestamp = nowTimestamp();
+          let uuid = typeof rawItem.uuid === "string" ? rawItem.uuid.trim() : "";
+          if (uuid === "" || seenUUIDs.has(uuid)) {
+            uuid = generateUUID();
+          }
+          seenUUIDs.add(uuid);
+
+          const createdAt = typeof rawItem.created_at === "string" && rawItem.created_at.trim() !== ""
+            ? rawItem.created_at.trim()
+            : timestamp;
+          const updatedAt = typeof rawItem.updated_at === "string" && rawItem.updated_at.trim() !== ""
+            ? rawItem.updated_at.trim()
+            : createdAt;
+
+          const children = [];
+          if (Array.isArray(rawItem.children)) {
+            for (const rawChild of rawItem.children) {
+              const child = normalizeLocalStorageItem(rawChild, seenUUIDs);
+              if (child) {
+                children.push(child);
+              }
+            }
+          }
+
+          return {
+            uuid,
+            created_at: createdAt,
+            updated_at: updatedAt,
+            body: typeof rawItem.body === "string" ? rawItem.body : "",
+            is_open: rawItem.is_open !== false,
+            is_favorite: rawItem.is_favorite === true,
+            children
+          };
+        }
+
+        function readLocalItemsFromStorage() {
+          try {
+            const encoded = localStorage.getItem(localItemsStorageKey);
+            if (!encoded) {
+              return null;
+            }
+
+            const parsed = JSON.parse(encoded);
+            const rawItems = Array.isArray(parsed)
+              ? parsed
+              : parsed && typeof parsed === "object" && Array.isArray(parsed.items)
+                ? parsed.items
+                : null;
+            if (!rawItems) {
+              return null;
+            }
+
+            const seenUUIDs = new Set();
+            const items = rawItems
+              .map((rawItem) => normalizeLocalStorageItem(rawItem, seenUUIDs))
+              .filter((item) => item !== null);
+            if (items.length === 0) {
+              return null;
+            }
+
+            return items;
+          } catch (_error) {
+            return null;
+          }
+        }
+
+        function persistLocalItemsToStorage() {
+          if (!localMode || !localItemsInitialized) {
+            return;
+          }
+
+          try {
+            const payload = {
+              version: 1,
+              saved_at: nowTimestamp(),
+              items: localItems.map((item) => cloneLocalStorageItem(item))
+            };
+            localStorage.setItem(localItemsStorageKey, JSON.stringify(payload));
+          } catch (_error) {
+            // Best effort only.
+          }
         }
 
         function ensureLocalItemsInitialized() {
           if (localItemsInitialized) {
             return;
           }
-          localItems = buildLocalDemoItems();
+          const storedItems = readLocalItemsFromStorage();
+          localItems = storedItems || buildLocalDemoItems();
           localItemsInitialized = true;
+          persistLocalItemsToStorage();
         }
 
         function suppressFocusChrome(el) {
@@ -2109,6 +2212,7 @@
               const { item } = requireItemLocation(uuid);
               item.body = body;
               item.updated_at = nowTimestamp();
+              persistLocalItemsToStorage();
             } else {
               const response = await fetch(`/api/items/${encodeURIComponent(uuid)}`, {
                 method: "PATCH",
@@ -2153,6 +2257,7 @@
             const { item } = requireItemLocation(uuid);
             item.is_open = isOpen;
             item.updated_at = nowTimestamp();
+            persistLocalItemsToStorage();
             return;
           }
 
@@ -2174,6 +2279,7 @@
             const { item } = requireItemLocation(uuid);
             item.is_favorite = isFavorite;
             item.updated_at = nowTimestamp();
+            persistLocalItemsToStorage();
             return;
           }
 
@@ -2197,6 +2303,7 @@
             }
             const location = requireItemLocation(uuid);
             location.list.splice(location.index, 1);
+            persistLocalItemsToStorage();
             return;
           }
 
@@ -2223,6 +2330,7 @@
             } else {
               location.list.splice(location.index + 1, 0, newItem);
             }
+            persistLocalItemsToStorage();
             return { uuid: newItem.uuid };
           }
 
@@ -2244,6 +2352,7 @@
             location.item.children.unshift(newItem);
             location.item.is_open = true;
             location.item.updated_at = nowTimestamp();
+            persistLocalItemsToStorage();
             return { uuid: newItem.uuid };
           }
 
@@ -2263,6 +2372,7 @@
             ensureLocalItemsInitialized();
             const newItem = createLocalItem("");
             localItems.push(newItem);
+            persistLocalItemsToStorage();
             return { uuid: newItem.uuid };
           }
 
@@ -2289,6 +2399,7 @@
             previousSibling.is_open = true;
             previousSibling.updated_at = timestamp;
             movedItem.updated_at = timestamp;
+            persistLocalItemsToStorage();
             return;
           }
 
@@ -2314,6 +2425,7 @@
             const timestamp = nowTimestamp();
             movedItem.updated_at = timestamp;
             parentLocation.item.updated_at = timestamp;
+            persistLocalItemsToStorage();
             return;
           }
 
@@ -2357,6 +2469,7 @@
             if (targetParentItem && targetParentItem !== fromLocation.parentItem) {
               targetParentItem.updated_at = timestamp;
             }
+            persistLocalItemsToStorage();
             return;
           }
 
@@ -3308,6 +3421,14 @@
             outlineItems = data.items;
             renderOutline(focusUUID);
           } catch (error) {
+            if (!localMode) {
+              localMode = true;
+              ensureLocalItemsInitialized();
+              outlineItems = localItems;
+              renderOutline(focusUUID);
+              clearError();
+              return;
+            }
             showError(String(error));
           }
         }
