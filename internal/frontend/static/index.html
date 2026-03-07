@@ -263,29 +263,11 @@
         background: var(--page-bg);
       }
 
-      .top-bar {
-        height: 20px;
-        width: 100%;
-        background: var(--top-bar-bg);
-        border-bottom: 1px solid var(--top-bar-border);
-        display: flex;
-        justify-content: center;
-        position: sticky;
-        top: 0;
-        z-index: 200;
-      }
-
-      .top-bar-inner {
-        width: min(42rem, 92vw);
-        display: flex;
-        justify-content: flex-end;
-        align-items: center;
-      }
-
       .top-controls {
         display: inline-flex;
         align-items: center;
         gap: 0.5rem;
+        position: relative;
       }
 
       .top-actions {
@@ -343,19 +325,74 @@
         opacity: 0.9;
       }
 
-      .top-controls select {
-        height: 1rem;
-        padding: 0 0.2rem;
+      .theme-menu-trigger {
+        width: 1.35rem;
+        height: 1.15rem;
+        padding: 0;
         border-radius: 4px;
         border: 1px solid var(--control-border);
         background: var(--control-bg);
         color: var(--control-text);
-        font-size: 0.62rem;
+        font-size: 0.78rem;
+        line-height: 1;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
       }
 
-      .top-controls select:focus-visible {
+      .theme-menu-trigger:hover {
+        background: color-mix(in srgb, var(--control-bg) 72%, #000000 28%);
+      }
+
+      .theme-menu-trigger:focus-visible {
         outline: 1px solid var(--control-focus);
         outline-offset: 0;
+      }
+
+      .theme-menu {
+        position: absolute;
+        top: calc(100% + 0.2rem);
+        right: 0;
+        min-width: 9.5rem;
+        max-height: min(19rem, 55vh);
+        overflow-y: auto;
+        border: 1px solid var(--control-border);
+        border-radius: 7px;
+        background: var(--tool-menu-bg);
+        box-shadow: 0 10px 22px #0000002b;
+        z-index: 220;
+        padding: 0.2rem;
+      }
+
+      .theme-menu[hidden] {
+        display: none;
+      }
+
+      .theme-menu-item {
+        width: 100%;
+        height: 1.35rem;
+        border: none;
+        border-radius: 5px;
+        background: transparent;
+        color: var(--tool-menu-text);
+        font-size: 0.73rem;
+        text-align: left;
+        padding: 0 0.38rem;
+        cursor: pointer;
+      }
+
+      .theme-menu-item:hover {
+        background: var(--tool-menu-hover-bg);
+      }
+
+      .theme-menu-item:focus-visible {
+        outline: 1px solid var(--control-focus);
+        outline-offset: 0;
+      }
+
+      .theme-menu-item.is-selected {
+        font-weight: 600;
       }
 
       .page {
@@ -687,7 +724,7 @@
       .outline-toolbar {
         display: flex;
         align-items: center;
-        justify-content: space-between;
+        justify-content: flex-start;
         gap: 0.5rem;
         margin: 0 0 0.75rem 0;
         padding: 0.35rem 0.45rem;
@@ -695,8 +732,16 @@
         background: var(--toggle-bg);
         color: var(--toggle-text);
         position: sticky;
-        top: calc(20px + 0.25rem);
+        top: 0.25rem;
         z-index: 150;
+      }
+
+      .toolbar-right {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        min-width: 0;
       }
 
       .outline-search {
@@ -749,16 +794,21 @@
       .zoom-home-link:hover {
         text-decoration: underline;
       }
+
+      @media (max-width: 720px) {
+        .outline-toolbar {
+          flex-wrap: wrap;
+        }
+
+        .toolbar-right {
+          width: 100%;
+          margin-left: 0;
+          justify-content: flex-end;
+        }
+      }
     </style>
   </head>
   <body>
-    <div class="top-bar">
-      <div class="top-bar-inner">
-        <div class="top-controls">
-          <select id="theme-select" aria-label="Theme selector"></select>
-        </div>
-      </div>
-    </div>
     <div class="page">
       <main>
         <div class="outline-toolbar">
@@ -800,13 +850,27 @@
               aria-label="Show favorites only"
             ></button>
           </div>
-          <input
-            id="outline-search"
-            class="outline-search"
-            type="search"
-            placeholder="Search"
-            aria-label="Search items"
-          />
+          <div class="toolbar-right">
+            <input
+              id="outline-search"
+              class="outline-search"
+              type="search"
+              placeholder="Search"
+              aria-label="Search items"
+            />
+            <div class="top-controls">
+              <button
+                id="theme-menu-trigger"
+                class="theme-menu-trigger"
+                type="button"
+                title="Theme menu"
+                aria-label="Theme menu"
+                aria-haspopup="menu"
+                aria-expanded="false"
+              >◐</button>
+              <div id="theme-menu" class="theme-menu" role="menu" hidden></div>
+            </div>
+          </div>
         </div>
         <div id="zoom-context" class="zoom-context" hidden>
           <a id="zoom-home-link" class="zoom-home-link" href="/">Back to all items</a>
@@ -828,7 +892,8 @@
         const expandLevelBtnEl = document.getElementById("expand-level-btn");
         const collapseAllBtnEl = document.getElementById("collapse-all-btn");
         const favoriteItemBtnEl = document.getElementById("favorite-item-btn");
-        const themeSelect = document.getElementById("theme-select");
+        const themeMenuTriggerEl = document.getElementById("theme-menu-trigger");
+        const themeMenuEl = document.getElementById("theme-menu");
         const searchInputEl = document.getElementById("outline-search");
         const themeStorageKey = "orgline-theme";
         const zoomQueryParam = "item_id";
@@ -877,47 +942,63 @@
             // Best effort only.
           }
 
-          if (themeSelect instanceof HTMLSelectElement) {
-            rebuildThemeOptions(selectedTheme);
-          }
+          rebuildThemeMenu(selectedTheme);
         }
 
-        function rebuildThemeOptions(selectedThemeID) {
-          if (!(themeSelect instanceof HTMLSelectElement)) {
+        function closeThemeMenu() {
+          if (!(themeMenuEl instanceof HTMLElement) || !(themeMenuTriggerEl instanceof HTMLButtonElement)) {
+            return;
+          }
+          themeMenuEl.hidden = true;
+          themeMenuTriggerEl.setAttribute("aria-expanded", "false");
+        }
+
+        function rebuildThemeMenu(selectedThemeID) {
+          if (!(themeMenuEl instanceof HTMLElement) || !(themeMenuTriggerEl instanceof HTMLButtonElement)) {
             return;
           }
 
-          themeSelect.replaceChildren();
+          themeMenuTriggerEl.textContent = "◐";
+          themeMenuEl.replaceChildren();
           const selectedTheme = themes.find((theme) => theme.id === selectedThemeID) || themes[0];
           if (!selectedTheme) {
             return;
           }
 
-          const selectedOption = document.createElement("option");
-          selectedOption.value = selectedTheme.id;
-          selectedOption.textContent = `${selectedTheme.label} theme`;
-          themeSelect.appendChild(selectedOption);
-
           for (const theme of themes) {
-            if (theme.id === selectedTheme.id) {
-              continue;
-            }
-            const option = document.createElement("option");
-            option.value = theme.id;
-            option.textContent = theme.label;
-            themeSelect.appendChild(option);
+            const themeItem = document.createElement("button");
+            themeItem.type = "button";
+            themeItem.className = "theme-menu-item";
+            themeItem.setAttribute("role", "menuitemradio");
+            const isSelected = theme.id === selectedTheme.id;
+            themeItem.setAttribute("aria-checked", isSelected ? "true" : "false");
+            themeItem.classList.toggle("is-selected", isSelected);
+            themeItem.textContent = isSelected ? `✓ ${theme.label}` : theme.label;
+            themeItem.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              applyTheme(theme.id);
+              closeThemeMenu();
+            });
+            themeMenuEl.appendChild(themeItem);
           }
-
-          themeSelect.value = selectedTheme.id;
         }
 
         function initThemeControls() {
-          if (!(themeSelect instanceof HTMLSelectElement)) {
+          if (!(themeMenuEl instanceof HTMLElement) || !(themeMenuTriggerEl instanceof HTMLButtonElement)) {
             return;
           }
 
-          themeSelect.addEventListener("change", () => {
-            applyTheme(themeSelect.value);
+          themeMenuTriggerEl.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const willOpen = themeMenuEl.hidden;
+            closeAllToolMenus();
+            themeMenuEl.hidden = !willOpen;
+            themeMenuTriggerEl.setAttribute("aria-expanded", willOpen ? "true" : "false");
+          });
+          themeMenuEl.addEventListener("click", (event) => {
+            event.stopPropagation();
           });
 
           let storedTheme = "default";
@@ -3343,6 +3424,7 @@
 
         document.addEventListener("click", () => {
           closeAllToolMenus();
+          closeThemeMenu();
         });
         window.addEventListener("beforeunload", (event) => {
           if (!hasUnsavedChanges()) {
