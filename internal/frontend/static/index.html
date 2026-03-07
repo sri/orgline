@@ -46,6 +46,12 @@
         --control-focus: #5b97a0;
         --favorite-active: #d93858;
         --error-color: #8a1c1c;
+        --message-warning-bg: #f3d18a;
+        --message-warning-border: #b27b17;
+        --message-warning-text: #4a3210;
+        --message-error-bg: #efb2bb;
+        --message-error-border: #b74255;
+        --message-error-text: #4e1320;
       }
 
       :root[data-theme="default"] {
@@ -91,6 +97,12 @@
         --control-text: #eef3ff;
         --control-focus: #f6881f;
         --error-color: #ff9ca8;
+        --message-warning-bg: #5b4019;
+        --message-warning-border: #f0a33a;
+        --message-warning-text: #ffd8a1;
+        --message-error-bg: #5a2731;
+        --message-error-border: #ff6f87;
+        --message-error-text: #ffd2dc;
       }
 
       :root[data-theme="matrix"] {
@@ -132,6 +144,12 @@
         --control-text: #9af3ba;
         --control-focus: #52df81;
         --error-color: #ff8f8f;
+        --message-warning-bg: #2d4312;
+        --message-warning-border: #a6dd3b;
+        --message-warning-text: #e7ffba;
+        --message-error-bg: #4a1d28;
+        --message-error-border: #ff6b8c;
+        --message-error-text: #ffd1dd;
       }
 
       :root[data-theme="ocean"] {
@@ -173,6 +191,12 @@
         --control-text: #1f3e54;
         --control-focus: #5ca7d8;
         --error-color: #9a2130;
+        --message-warning-bg: #ffe0ad;
+        --message-warning-border: #c2832b;
+        --message-warning-text: #5a3a12;
+        --message-error-bg: #f6b4c1;
+        --message-error-border: #bd4461;
+        --message-error-text: #5b1525;
       }
 
       :root[data-theme="solar"] {
@@ -214,6 +238,12 @@
         --control-text: #553621;
         --control-focus: #e08e4c;
         --error-color: #8a1c1c;
+        --message-warning-bg: #f3c77b;
+        --message-warning-border: #b1731e;
+        --message-warning-text: #4a2f0f;
+        --message-error-bg: #eaa6b0;
+        --message-error-border: #ae364f;
+        --message-error-text: #49111f;
       }
 
       :root[data-theme="graphite"] {
@@ -255,6 +285,12 @@
         --control-text: #f2f5fc;
         --control-focus: #97a5c4;
         --error-color: #ffafb0;
+        --message-warning-bg: #5a4a25;
+        --message-warning-border: #e0b35d;
+        --message-warning-text: #ffe8bc;
+        --message-error-bg: #673242;
+        --message-error-border: #ff8ea4;
+        --message-error-text: #ffd9e1;
       }
 
       body {
@@ -323,6 +359,155 @@
         height: 0.95rem;
         background: color-mix(in srgb, var(--control-border) 82%, #000000 18%);
         opacity: 0.9;
+      }
+
+      .message-stack {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        min-width: 0;
+        max-width: 18rem;
+        flex: 1 1 auto;
+      }
+
+      .message-stack[hidden] {
+        display: none;
+      }
+
+      .message-stack-trigger {
+        width: 100%;
+        height: 1.35rem;
+        border-radius: 6px;
+        border: 1px solid var(--message-warning-border);
+        background: var(--message-warning-bg);
+        color: var(--message-warning-text);
+        font-size: 0.69rem;
+        font-weight: 600;
+        line-height: 1;
+        padding: 0 0.42rem;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        text-align: left;
+      }
+
+      .message-stack-trigger:hover {
+        background: color-mix(in srgb, var(--message-warning-bg) 82%, #000000 18%);
+      }
+
+      .message-stack-trigger:focus-visible {
+        outline: 1px solid var(--control-focus);
+        outline-offset: 0;
+      }
+
+      .message-stack-trigger.is-error {
+        border-color: var(--message-error-border);
+        background: var(--message-error-bg);
+        color: var(--message-error-text);
+      }
+
+      .message-stack-trigger.is-error:hover {
+        background: color-mix(in srgb, var(--message-error-bg) 82%, #000000 18%);
+      }
+
+      .message-stack-count {
+        min-width: 1.05rem;
+        height: 0.9rem;
+        border-radius: 999px;
+        border: 1px solid color-mix(in srgb, currentColor 72%, transparent 28%);
+        padding: 0 0.25rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.62rem;
+        line-height: 1;
+        flex: 0 0 auto;
+      }
+
+      .message-stack-label {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .message-stack-menu {
+        position: absolute;
+        top: calc(100% + 0.24rem);
+        right: 0;
+        width: min(24rem, 82vw);
+        max-height: min(18rem, 60vh);
+        overflow-y: auto;
+        border: 1px solid var(--control-border);
+        border-radius: 8px;
+        background: var(--tool-menu-bg);
+        box-shadow: 0 10px 24px #00000030;
+        z-index: 230;
+        padding: 0.34rem;
+      }
+
+      .message-stack-menu[hidden] {
+        display: none;
+      }
+
+      .message-stack-item {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        border-radius: 6px;
+        border: 1px solid var(--message-warning-border);
+        background: var(--message-warning-bg);
+        color: var(--message-warning-text);
+        padding: 0.3rem 0.38rem;
+      }
+
+      .message-stack-item + .message-stack-item {
+        margin-top: 0.28rem;
+      }
+
+      .message-stack-item.is-error {
+        border-color: var(--message-error-border);
+        background: var(--message-error-bg);
+        color: var(--message-error-text);
+      }
+
+      .message-stack-item-level {
+        font-size: 0.62rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        flex: 0 0 auto;
+      }
+
+      .message-stack-item-text {
+        font-size: 0.68rem;
+        line-height: 1.25;
+        flex: 1 1 auto;
+      }
+
+      .message-stack-dismiss {
+        width: 1rem;
+        height: 1rem;
+        border-radius: 999px;
+        border: 1px solid color-mix(in srgb, currentColor 72%, transparent 28%);
+        background: transparent;
+        color: inherit;
+        font-size: 0.66rem;
+        line-height: 1;
+        padding: 0;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+      }
+
+      .message-stack-dismiss:hover {
+        background: color-mix(in srgb, currentColor 16%, transparent 84%);
+      }
+
+      .message-stack-dismiss:focus-visible {
+        outline: 1px solid var(--control-focus);
+        outline-offset: 0;
       }
 
       .theme-menu-trigger {
@@ -742,6 +927,7 @@
         align-items: center;
         gap: 0.45rem;
         min-width: 0;
+        flex: 0 0 auto;
       }
 
       .outline-search {
@@ -799,6 +985,20 @@
           flex-wrap: nowrap;
         }
 
+        .message-stack {
+          max-width: 2.4rem;
+          flex: 0 0 auto;
+        }
+
+        .message-stack-trigger {
+          justify-content: center;
+          padding: 0 0.2rem;
+        }
+
+        .message-stack-label {
+          display: none;
+        }
+
         .toolbar-right {
           width: auto;
           margin-left: auto;
@@ -819,6 +1019,7 @@
               title="Undo"
               aria-label="Undo"
             >↶</button>
+            <span class="top-action-divider" aria-hidden="true"></span>
             <button
               id="expand-all-btn"
               class="top-action"
@@ -848,6 +1049,18 @@
               title="Show favorites only"
               aria-label="Show favorites only"
             ></button>
+          </div>
+          <div id="message-stack" class="message-stack" hidden>
+            <button
+              id="message-stack-trigger"
+              class="message-stack-trigger"
+              type="button"
+              title="Messages"
+              aria-label="Messages"
+              aria-haspopup="dialog"
+              aria-expanded="false"
+            ></button>
+            <div id="message-stack-menu" class="message-stack-menu" hidden></div>
           </div>
           <div class="toolbar-right">
             <input
@@ -891,11 +1104,16 @@
         const expandLevelBtnEl = document.getElementById("expand-level-btn");
         const collapseAllBtnEl = document.getElementById("collapse-all-btn");
         const favoriteItemBtnEl = document.getElementById("favorite-item-btn");
+        const messageStackEl = document.getElementById("message-stack");
+        const messageStackTriggerEl = document.getElementById("message-stack-trigger");
+        const messageStackMenuEl = document.getElementById("message-stack-menu");
         const themeMenuTriggerEl = document.getElementById("theme-menu-trigger");
         const themeMenuEl = document.getElementById("theme-menu");
         const searchInputEl = document.getElementById("outline-search");
         const themeStorageKey = "orgline-theme";
         const localItemsStorageKey = "orgline-items-v1";
+        const messageDismissalsStorageKey = "orgline-message-dismissals-v1";
+        const localModeMessageID = "local-mode-warning";
         const zoomQueryParam = "item_id";
         const searchMinChars = 2;
         let localMode = (() => {
@@ -923,6 +1141,9 @@
         const undoStack = [];
         const maxUndoDepth = 200;
         let applyingUndo = false;
+        let stackMessageCounter = 0;
+        const stackMessages = [];
+        let messageDismissals = {};
 
         const themes = [
           { id: "default", label: "default" },
@@ -944,6 +1165,7 @@
           }
 
           rebuildThemeMenu(selectedTheme);
+          renderMessageStack();
         }
 
         function closeThemeMenu() {
@@ -995,6 +1217,7 @@
             event.stopPropagation();
             const willOpen = themeMenuEl.hidden;
             closeAllToolMenus();
+            closeMessageStackMenu();
             themeMenuEl.hidden = !willOpen;
             themeMenuTriggerEl.setAttribute("aria-expanded", willOpen ? "true" : "false");
           });
@@ -1009,6 +1232,281 @@
             storedTheme = "default";
           }
           applyTheme(storedTheme);
+        }
+
+        function activeThemeID() {
+          const current = (document.documentElement.dataset.theme || "default").trim();
+          if (themes.some((theme) => theme.id === current)) {
+            return current;
+          }
+          return "default";
+        }
+
+        function loadMessageDismissals() {
+          try {
+            const encoded = localStorage.getItem(messageDismissalsStorageKey);
+            if (!encoded) {
+              return {};
+            }
+            const parsed = JSON.parse(encoded);
+            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+              return {};
+            }
+            return parsed;
+          } catch (_error) {
+            return {};
+          }
+        }
+
+        function persistMessageDismissals() {
+          try {
+            localStorage.setItem(messageDismissalsStorageKey, JSON.stringify(messageDismissals));
+          } catch (_error) {
+            // Best effort only.
+          }
+        }
+
+        function dismissTokenForTheme(themeID, dismissKey) {
+          return `${themeID}::${dismissKey}`;
+        }
+
+        function isMessageDismissedForCurrentTheme(message) {
+          if (!message || !message.dismissKey) {
+            return false;
+          }
+          const token = dismissTokenForTheme(activeThemeID(), message.dismissKey);
+          return messageDismissals[token] === true;
+        }
+
+        function dismissMessageForCurrentTheme(message) {
+          if (!message || !message.dismissKey) {
+            return;
+          }
+          const token = dismissTokenForTheme(activeThemeID(), message.dismissKey);
+          messageDismissals[token] = true;
+          persistMessageDismissals();
+        }
+
+        function addOrUpdateStackMessage(message) {
+          const id = typeof message.id === "string" ? message.id.trim() : "";
+          const text = typeof message.text === "string" ? message.text.trim() : "";
+          if (id === "" || text === "") {
+            return;
+          }
+
+          const normalized = {
+            id,
+            level: message.level === "warning" ? "warning" : "error",
+            text,
+            dismissible: message.dismissible !== false,
+            persistent: message.persistent === true,
+            dismissKey: typeof message.dismissKey === "string" ? message.dismissKey.trim() : "",
+            createdAt: Date.now()
+          };
+
+          const existingIndex = stackMessages.findIndex((entry) => entry.id === id);
+          if (existingIndex >= 0) {
+            stackMessages[existingIndex] = { ...stackMessages[existingIndex], ...normalized };
+            return;
+          }
+
+          stackMessages.unshift(normalized);
+          if (stackMessages.length > 40) {
+            for (let index = stackMessages.length - 1; index >= 0; index -= 1) {
+              if (stackMessages[index].persistent) {
+                continue;
+              }
+              stackMessages.splice(index, 1);
+              if (stackMessages.length <= 40) {
+                break;
+              }
+            }
+          }
+        }
+
+        function removeStackMessageByID(id) {
+          const index = stackMessages.findIndex((entry) => entry.id === id);
+          if (index < 0) {
+            return;
+          }
+          stackMessages.splice(index, 1);
+        }
+
+        function upsertLocalModeWarningMessage() {
+          if (!localMode) {
+            removeStackMessageByID(localModeMessageID);
+            return;
+          }
+
+          addOrUpdateStackMessage({
+            id: localModeMessageID,
+            level: "warning",
+            text: "Local mode is active. Data is stored in this browser's local storage.",
+            dismissible: true,
+            persistent: true,
+            dismissKey: localModeMessageID
+          });
+        }
+
+        function visibleStackMessages() {
+          return stackMessages.filter((message) => !isMessageDismissedForCurrentTheme(message));
+        }
+
+        function closeMessageStackMenu() {
+          if (!(messageStackMenuEl instanceof HTMLElement) || !(messageStackTriggerEl instanceof HTMLButtonElement)) {
+            return;
+          }
+          messageStackMenuEl.hidden = true;
+          messageStackTriggerEl.setAttribute("aria-expanded", "false");
+        }
+
+        function renderMessageStack() {
+          if (
+            !(messageStackEl instanceof HTMLElement) ||
+            !(messageStackTriggerEl instanceof HTMLButtonElement) ||
+            !(messageStackMenuEl instanceof HTMLElement)
+          ) {
+            return;
+          }
+
+          upsertLocalModeWarningMessage();
+
+          const messages = visibleStackMessages();
+          if (messages.length === 0) {
+            messageStackEl.hidden = true;
+            closeMessageStackMenu();
+            return;
+          }
+
+          messageStackEl.hidden = false;
+
+          const topErrorMessage = messages.find((message) => message.level === "error");
+          const topMessage = topErrorMessage || messages[0];
+          const topIsError = topMessage.level === "error";
+
+          messageStackTriggerEl.classList.toggle("is-error", topIsError);
+          messageStackTriggerEl.classList.toggle("is-warning", !topIsError);
+          messageStackTriggerEl.title = `${messages.length} message${messages.length === 1 ? "" : "s"}`;
+          messageStackTriggerEl.setAttribute(
+            "aria-label",
+            `${messages.length} message${messages.length === 1 ? "" : "s"}`
+          );
+          messageStackTriggerEl.replaceChildren();
+
+          const countEl = document.createElement("span");
+          countEl.className = "message-stack-count";
+          countEl.textContent = String(messages.length);
+
+          const labelEl = document.createElement("span");
+          labelEl.className = "message-stack-label";
+          const prefix = topIsError ? "Error" : "Warning";
+          if (messages.length === 1) {
+            labelEl.textContent = `${prefix}: ${topMessage.text}`;
+          } else {
+            labelEl.textContent = `${messages.length} messages: ${topMessage.text}`;
+          }
+
+          messageStackTriggerEl.append(countEl, labelEl);
+
+          messageStackMenuEl.replaceChildren();
+          for (const message of messages) {
+            const itemEl = document.createElement("div");
+            itemEl.className = "message-stack-item";
+            itemEl.classList.toggle("is-error", message.level === "error");
+
+            const levelEl = document.createElement("span");
+            levelEl.className = "message-stack-item-level";
+            levelEl.textContent = message.level === "error" ? "ERROR" : "WARNING";
+
+            const textEl = document.createElement("span");
+            textEl.className = "message-stack-item-text";
+            textEl.textContent = message.text;
+
+            itemEl.append(levelEl, textEl);
+
+            if (message.dismissible) {
+              const dismissBtn = document.createElement("button");
+              dismissBtn.type = "button";
+              dismissBtn.className = "message-stack-dismiss";
+              dismissBtn.textContent = "×";
+              dismissBtn.title = "Dismiss message";
+              dismissBtn.setAttribute("aria-label", "Dismiss message");
+              dismissBtn.addEventListener("click", (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                if (message.persistent && message.dismissKey) {
+                  dismissMessageForCurrentTheme(message);
+                } else {
+                  removeStackMessageByID(message.id);
+                }
+                renderMessageStack();
+              });
+              itemEl.appendChild(dismissBtn);
+            }
+
+            messageStackMenuEl.appendChild(itemEl);
+          }
+        }
+
+        function pushStackMessage(level, text, options = {}) {
+          const normalizedText = typeof text === "string" ? text.trim() : "";
+          if (normalizedText === "") {
+            return;
+          }
+
+          const normalizedLevel = level === "warning" ? "warning" : "error";
+          let id = typeof options.id === "string" ? options.id.trim() : "";
+          if (id === "") {
+            const duplicate = stackMessages.find((message) => (
+              !message.persistent &&
+              message.level === normalizedLevel &&
+              message.text === normalizedText
+            ));
+            if (duplicate) {
+              duplicate.createdAt = Date.now();
+              renderMessageStack();
+              return;
+            }
+            stackMessageCounter += 1;
+            id = `message-${stackMessageCounter}`;
+          }
+
+          addOrUpdateStackMessage({
+            id,
+            level: normalizedLevel,
+            text: normalizedText,
+            dismissible: options.dismissible !== false,
+            persistent: options.persistent === true,
+            dismissKey: typeof options.dismissKey === "string" ? options.dismissKey : ""
+          });
+          renderMessageStack();
+        }
+
+        function initMessageStackControls() {
+          if (
+            !(messageStackEl instanceof HTMLElement) ||
+            !(messageStackTriggerEl instanceof HTMLButtonElement) ||
+            !(messageStackMenuEl instanceof HTMLElement)
+          ) {
+            return;
+          }
+
+          messageDismissals = loadMessageDismissals();
+
+          messageStackTriggerEl.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const willOpen = messageStackMenuEl.hidden;
+            closeAllToolMenus();
+            closeThemeMenu();
+            messageStackMenuEl.hidden = !willOpen;
+            messageStackTriggerEl.setAttribute("aria-expanded", willOpen ? "true" : "false");
+          });
+          messageStackMenuEl.addEventListener("click", (event) => {
+            event.stopPropagation();
+          });
+
+          renderMessageStack();
         }
 
         function initDevAutoReload() {
@@ -1284,14 +1782,17 @@
           }
           errorEl.hidden = true;
           errorEl.textContent = "";
+          renderMessageStack();
         }
 
         function showError(message) {
           if (!errorEl) {
             return;
           }
-          errorEl.hidden = false;
-          errorEl.textContent = message;
+          const text = typeof message === "string" ? message.trim() : String(message);
+          errorEl.hidden = true;
+          errorEl.textContent = text;
+          pushStackMessage("error", text, { dismissible: true });
         }
 
         function heartIconMarkup(isActive) {
@@ -3409,6 +3910,7 @@
               ensureLocalItemsInitialized();
               outlineItems = localItems;
               renderOutline(focusUUID);
+              renderMessageStack();
               return;
             }
 
@@ -3427,6 +3929,7 @@
               outlineItems = localItems;
               renderOutline(focusUUID);
               clearError();
+              renderMessageStack();
               return;
             }
             showError(String(error));
@@ -3705,6 +4208,7 @@
         document.addEventListener("click", () => {
           closeAllToolMenus();
           closeThemeMenu();
+          closeMessageStackMenu();
         });
         if (rootEl) {
           rootEl.addEventListener("mousedown", (event) => {
@@ -3763,6 +4267,7 @@
         });
 
         initThemeControls();
+        initMessageStackControls();
         initDevAutoReload();
         initSearchControls();
         initTopActions();
