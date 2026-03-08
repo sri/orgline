@@ -5,12 +5,11 @@
 </p>
 
 <p align="center">
-  Emacs org-mode inspired outliner in <strong>plain Go + plain JavaScript</strong>.
+  An outliner with a clean web interface, shipped as a single binary.
 </p>
 
 <p align="center">
-  Built to create an Emacs-style org-mode outline for the web with minimal dependencies:
-  single Go binary, embedded frontend assets, and SQLite.
+  Built with <strong>plain Go + plain JavaScript</strong>, embedded frontend assets, and SQLite.
 </p>
 
 <p align="center">
