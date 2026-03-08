@@ -695,9 +695,9 @@
         border-top: 1px solid color-mix(in srgb, var(--control-border) 70%, transparent 30%);
       }
 
-      .top-help-table tbody tr[data-target-id],
-      .top-help-table tbody tr[data-target-id] *,
-      .top-help-table tbody tr[data-target-id] td {
+      .top-help-table tbody tr,
+      .top-help-table tbody tr *,
+      .top-help-table tbody tr td {
         cursor: pointer !important;
       }
 
@@ -1480,7 +1480,7 @@
                       <td>Show only favorited items.</td>
                     </tr>
                     <tr data-target-id="message-stack-trigger">
-                      <td class="top-help-symbol">count</td>
+                      <td class="top-help-symbol"></td>
                       <td>Messages</td>
                       <td>Open warning/error message stack.</td>
                     </tr>
@@ -1495,6 +1495,11 @@
                       <td class="top-help-symbol">?</td>
                       <td>Help</td>
                       <td>Toggle the help widget.</td>
+                    </tr>
+                    <tr data-target-id="debug-toolbar-close-btn">
+                      <td class="top-help-symbol"></td>
+                      <td>Debug</td>
+                      <td>Toggle the debug toolbar.</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1859,6 +1864,10 @@
               previewTopHelpTarget(row);
               const targetID = (row.dataset.targetId || "").trim();
               if (targetID === "") {
+                return;
+              }
+              if (targetID === "debug-toolbar-close-btn") {
+                setDebugMode(!debugModeEnabled, { persist: true });
                 return;
               }
               if (targetID === "theme-menu-trigger") {
