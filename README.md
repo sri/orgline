@@ -21,7 +21,7 @@
 
 ## Demo
 
-- Local-only demo (no backend required): <https://sri.github.io/orgline/index.html?local=true>
+- Local-only demo (no backend required): <https://sri.github.io/orgline/index.html>
 
 ## Why orgline
 
@@ -68,7 +68,7 @@ Then open <http://localhost:8080>.
   - Shift+Up / Shift+Down range selection
   - multi-select delete/tab operations
   - in-memory undo stack (including multi-item delete restore)
-- Local mode (`?local=true`) for static demo use without backend API calls.
+- Local mode for static demo use without backend API calls.
 - Theme system with runtime switcher:
   - `default`, `dark`, `matrix`, `ocean`, `solar`, `graphite`
   - persisted in `localStorage` key `orgline-theme`
