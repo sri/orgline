@@ -1088,6 +1088,66 @@
         outline-offset: 0;
       }
 
+      .outline-empty-actions {
+        display: inline-flex;
+        align-items: center;
+      }
+
+      .outline-empty-create-main {
+        border-top-right-radius: 0;
+        border-bottom-right-radius: 0;
+      }
+
+      .outline-empty-menu {
+        position: relative;
+      }
+
+      .outline-empty-menu-trigger {
+        border-top-left-radius: 0;
+        border-bottom-left-radius: 0;
+        border-left-width: 0;
+        padding: 0.22rem 0.4rem;
+        min-width: 1.6rem;
+      }
+
+      .outline-empty-menu-list {
+        position: absolute;
+        top: calc(100% + 0.2rem);
+        right: 0;
+        display: flex;
+        flex-direction: column;
+        min-width: 13rem;
+        padding: 0.25rem;
+        border: 1px solid var(--tool-menu-border);
+        border-radius: 6px;
+        background: var(--tool-menu-bg);
+        box-shadow: 0 10px 20px #0000001a;
+        z-index: 260;
+      }
+
+      .outline-empty-menu-list[hidden] {
+        display: none;
+      }
+
+      .outline-empty-menu-option {
+        border: 0;
+        background: transparent;
+        color: var(--tool-menu-text);
+        text-align: left;
+        font-size: 0.74rem;
+        padding: 0.32rem 0.45rem;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+
+      .outline-empty-menu-option:hover {
+        background: var(--tool-menu-hover-bg);
+      }
+
+      .outline-empty-menu-option:focus-visible {
+        outline: 1px solid var(--toggle-focus);
+      }
+
       .outline-toolbar {
         display: flex;
         align-items: center;
@@ -2782,20 +2842,40 @@
           };
         }
 
+        function defaultStarterItemTemplates() {
+          return [
+            {
+              body: "Outliner Demo",
+              children: [
+                { body: "Click to edit any item", children: [] },
+                {
+                  body: "Use Enter to create items",
+                  children: [
+                    { body: "Shift+Enter inserts a newline", children: [] }
+                  ]
+                }
+              ]
+            },
+            {
+              body: "Local Mode",
+              children: [
+                { body: "No backend requests in ?local=true", children: [] },
+                { body: "Reload keeps local data", children: [] }
+              ]
+            }
+          ];
+        }
+
+        function createLocalItemFromTemplate(template) {
+          const item = createLocalItem(template.body);
+          item.children = Array.isArray(template.children)
+            ? template.children.map((childTemplate) => createLocalItemFromTemplate(childTemplate))
+            : [];
+          return item;
+        }
+
         function buildLocalDemoItems() {
-          const root1 = createLocalItem("Outliner Demo");
-          const root1Child1 = createLocalItem("Click to edit any item");
-          const root1Child2 = createLocalItem("Use Enter to create items");
-          const root1Grandchild1 = createLocalItem("Shift+Enter inserts a newline");
-          root1Child2.children.push(root1Grandchild1);
-          root1.children.push(root1Child1, root1Child2);
-
-          const root2 = createLocalItem("Local Mode");
-          const root2Child1 = createLocalItem("No backend requests in ?local=true");
-          const root2Child2 = createLocalItem("Reload keeps local data");
-          root2.children.push(root2Child1, root2Child2);
-
-          return [root1, root2];
+          return defaultStarterItemTemplates().map((template) => createLocalItemFromTemplate(template));
         }
 
         function cloneLocalStorageItem(item) {
@@ -4027,6 +4107,44 @@
           return response.json();
         }
 
+        async function createChildrenFromTemplates(parentUUID, childTemplates) {
+          for (let index = childTemplates.length - 1; index >= 0; index -= 1) {
+            const childTemplate = childTemplates[index];
+            const createdChild = await createChildItem(parentUUID);
+            await saveItemBody(createdChild.uuid, childTemplate.body);
+            if (Array.isArray(childTemplate.children) && childTemplate.children.length > 0) {
+              await createChildrenFromTemplates(createdChild.uuid, childTemplate.children);
+            }
+          }
+        }
+
+        async function populateDefaultItems() {
+          const templates = defaultStarterItemTemplates();
+          if (templates.length === 0) {
+            return "";
+          }
+
+          if (localMode) {
+            localItems = templates.map((template) => createLocalItemFromTemplate(template));
+            persistLocalItemsToStorage();
+            return localItems[0]?.uuid || "";
+          }
+
+          let firstUUID = "";
+          for (const template of templates) {
+            const createdRoot = await createRootItem();
+            if (firstUUID === "") {
+              firstUUID = createdRoot.uuid;
+            }
+            await saveItemBody(createdRoot.uuid, template.body);
+            if (Array.isArray(template.children) && template.children.length > 0) {
+              await createChildrenFromTemplates(createdRoot.uuid, template.children);
+            }
+          }
+
+          return firstUUID;
+        }
+
         async function indentItem(uuid) {
           if (localMode) {
             const location = requireItemLocation(uuid);
@@ -4866,20 +4984,80 @@
           const message = document.createElement("span");
           message.textContent = "No items.";
 
+          const actions = document.createElement("div");
+          actions.className = "outline-empty-actions";
+
           const createButton = document.createElement("button");
           createButton.type = "button";
-          createButton.className = "outline-empty-create";
+          createButton.className = "outline-empty-create outline-empty-create-main";
           createButton.textContent = "Create first item";
           createButton.setAttribute("aria-label", "Create first item");
-          createButton.addEventListener("click", () => {
+
+          const menu = document.createElement("div");
+          menu.className = "outline-empty-menu";
+
+          const menuTrigger = document.createElement("button");
+          menuTrigger.type = "button";
+          menuTrigger.className = "outline-empty-create outline-empty-menu-trigger";
+          menuTrigger.textContent = "▾";
+          menuTrigger.setAttribute("aria-label", "Open starter actions");
+          menuTrigger.setAttribute("aria-haspopup", "menu");
+          menuTrigger.setAttribute("aria-expanded", "false");
+
+          const menuList = document.createElement("div");
+          menuList.className = "outline-empty-menu-list";
+          menuList.setAttribute("role", "menu");
+          menuList.hidden = true;
+
+          const populateButton = document.createElement("button");
+          populateButton.type = "button";
+          populateButton.className = "outline-empty-menu-option";
+          populateButton.textContent = "Populate with default items";
+          populateButton.setAttribute("aria-label", "Populate with default items");
+          populateButton.setAttribute("role", "menuitem");
+
+          menuList.appendChild(populateButton);
+          menu.appendChild(menuTrigger);
+          menu.appendChild(menuList);
+
+          function setMenuOpen(isOpen) {
+            menuList.hidden = !isOpen;
+            menuTrigger.setAttribute("aria-expanded", isOpen ? "true" : "false");
+          }
+
+          menuTrigger.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            setMenuOpen(menuList.hidden);
+          });
+
+          menu.addEventListener("focusout", (event) => {
+            const nextTarget = event.relatedTarget;
+            if (nextTarget instanceof Node && menu.contains(nextTarget)) {
+              return;
+            }
+            setMenuOpen(false);
+          });
+
+          async function runEmptyStateAction(action) {
             if (topActionsBusy) {
               return;
             }
 
             topActionsBusy = true;
             setTopActionsState();
-            void (async () => {
-              try {
+            try {
+              const clearSearch = () => {
+                if (searchInputEl instanceof HTMLInputElement) {
+                  if (searchInputDebounceID !== 0) {
+                    window.clearTimeout(searchInputDebounceID);
+                    searchInputDebounceID = 0;
+                  }
+                  searchInputEl.value = "";
+                }
+              };
+
+              if (action === "create") {
                 const created = await createRootItem();
                 pushUndoAction({
                   kind: "create-item",
@@ -4889,26 +5067,38 @@
                     await deleteItem(created.uuid);
                   }
                 });
-                if (searchInputEl instanceof HTMLInputElement) {
-                  if (searchInputDebounceID !== 0) {
-                    window.clearTimeout(searchInputDebounceID);
-                    searchInputDebounceID = 0;
-                  }
-                  searchInputEl.value = "";
-                }
+                clearSearch();
                 await loadOutline(created.uuid);
-                clearError();
-              } catch (error) {
-                showError(`Unable to create item: ${String(error)}`);
-              } finally {
-                topActionsBusy = false;
-                setTopActionsState();
+              } else {
+                const focusUUID = await populateDefaultItems();
+                clearSearch();
+                await loadOutline(focusUUID);
               }
-            })();
+              clearError();
+            } catch (error) {
+              const prefix = action === "create" ? "create item" : "populate default items";
+              showError(`Unable to ${prefix}: ${String(error)}`);
+            } finally {
+              topActionsBusy = false;
+              setTopActionsState();
+              setMenuOpen(false);
+            }
+          }
+
+          createButton.addEventListener("click", () => {
+            void runEmptyStateAction("create");
+          });
+
+          populateButton.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            void runEmptyStateAction("populate");
           });
 
           empty.appendChild(message);
-          empty.appendChild(createButton);
+          actions.appendChild(createButton);
+          actions.appendChild(menu);
+          empty.appendChild(actions);
           return empty;
         }
 
