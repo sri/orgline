@@ -44,6 +44,7 @@
         --control-border: #0000002f;
         --control-text: #1d2a33;
         --control-focus: #5b97a0;
+        --help-highlight: #ff8a3d;
         --favorite-active: #d93858;
         --error-color: #8a1c1c;
         --message-warning-bg: #f3d18a;
@@ -106,6 +107,7 @@
         --control-border: #4a566a;
         --control-text: #eef3ff;
         --control-focus: #f6881f;
+        --help-highlight: #5fd4ff;
         --error-color: #ff9ca8;
         --message-warning-bg: #5b4019;
         --message-warning-border: #f0a33a;
@@ -163,6 +165,7 @@
         --control-border: #1b6e3b;
         --control-text: #9af3ba;
         --control-focus: #52df81;
+        --help-highlight: #ff4ecb;
         --error-color: #ff8f8f;
         --message-warning-bg: #2d4312;
         --message-warning-border: #a6dd3b;
@@ -220,6 +223,7 @@
         --control-border: #8fb4c9;
         --control-text: #1f3e54;
         --control-focus: #5ca7d8;
+        --help-highlight: #ff7a59;
         --error-color: #9a2130;
         --message-warning-bg: #ffe0ad;
         --message-warning-border: #c2832b;
@@ -277,6 +281,7 @@
         --control-border: #cb9f69;
         --control-text: #553621;
         --control-focus: #e08e4c;
+        --help-highlight: #3f7dff;
         --error-color: #8a1c1c;
         --message-warning-bg: #f3c77b;
         --message-warning-border: #b1731e;
@@ -334,6 +339,7 @@
         --control-border: #5b6578;
         --control-text: #f2f5fc;
         --control-focus: #97a5c4;
+        --help-highlight: #c58bff;
         --error-color: #ffafb0;
         --message-warning-bg: #5a4a25;
         --message-warning-border: #e0b35d;
@@ -570,7 +576,8 @@
         outline-offset: 0;
       }
 
-      .theme-menu-trigger {
+      .theme-menu-trigger,
+      .top-help-trigger {
         width: 1.35rem;
         height: 1.15rem;
         padding: 0;
@@ -586,11 +593,13 @@
         justify-content: center;
       }
 
-      .theme-menu-trigger:hover {
+      .theme-menu-trigger:hover,
+      .top-help-trigger:hover {
         background: color-mix(in srgb, var(--control-bg) 72%, #000000 28%);
       }
 
-      .theme-menu-trigger:focus-visible {
+      .theme-menu-trigger:focus-visible,
+      .top-help-trigger:focus-visible {
         outline: 1px solid var(--control-focus);
         outline-offset: 0;
       }
@@ -638,6 +647,119 @@
 
       .theme-menu-item.is-selected {
         font-weight: 600;
+      }
+
+      .top-help-menu {
+        position: absolute;
+        top: calc(100% + 0.2rem);
+        right: 0;
+        width: min(22rem, 92vw);
+        max-height: min(20rem, 64vh);
+        overflow: auto;
+        border: 1px solid var(--control-border);
+        border-radius: 7px;
+        background: var(--tool-menu-bg);
+        box-shadow: 0 10px 22px #0000002b;
+        z-index: 220;
+        padding: 0.3rem;
+        box-sizing: border-box;
+      }
+
+      .top-help-menu[hidden] {
+        display: none;
+      }
+
+      .top-help-table {
+        width: 100%;
+        border-collapse: collapse;
+        color: var(--tool-menu-text);
+        font-size: 0.7rem;
+      }
+
+      .top-help-table th,
+      .top-help-table td {
+        text-align: left;
+        padding: 0.22rem 0.3rem;
+        vertical-align: top;
+      }
+
+      .top-help-table thead th {
+        font-size: 0.62rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        opacity: 0.86;
+      }
+
+      .top-help-table tbody tr + tr td {
+        border-top: 1px solid color-mix(in srgb, var(--control-border) 70%, transparent 30%);
+      }
+
+      .top-help-table tbody tr[data-target-id],
+      .top-help-table tbody tr[data-target-id] *,
+      .top-help-table tbody tr[data-target-id] td {
+        cursor: pointer !important;
+      }
+
+      .top-help-table tbody tr[data-target-id]:hover,
+      .top-help-table tbody tr[data-target-id].is-linked {
+        background: color-mix(in srgb, var(--help-highlight) 22%, transparent 78%);
+      }
+
+      .top-help-symbol {
+        width: 2.2rem;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .top-help-theme-list {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 0.22rem;
+        align-items: center;
+      }
+
+      .top-help-theme-btn {
+        height: 1.15rem;
+        padding: 0 0.38rem;
+        border-radius: 5px;
+        border: 1px solid var(--control-border);
+        background: var(--control-bg);
+        color: var(--control-text);
+        font-size: 0.66rem;
+        line-height: 1;
+        cursor: pointer;
+      }
+
+      .top-help-theme-btn:hover {
+        background: color-mix(in srgb, var(--control-bg) 72%, #000000 28%);
+      }
+
+      .top-help-theme-btn:focus-visible {
+        outline: 1px solid var(--control-focus);
+        outline-offset: 0;
+      }
+
+      .top-help-theme-btn.is-selected {
+        border-color: var(--help-highlight);
+        background: color-mix(in srgb, var(--help-highlight) 26%, var(--control-bg) 74%);
+      }
+
+      @keyframes top-help-pulse {
+        0% {
+          box-shadow: 0 0 0 0 color-mix(in srgb, var(--help-highlight) 72%, transparent 28%);
+        }
+        70% {
+          box-shadow: 0 0 0 0.33rem color-mix(in srgb, var(--help-highlight) 0%, transparent 100%);
+        }
+        100% {
+          box-shadow: 0 0 0 0 color-mix(in srgb, var(--help-highlight) 0%, transparent 100%);
+        }
+      }
+
+      .top-help-target-active {
+        animation: top-help-pulse 1.05s ease-out infinite;
+        background: color-mix(in srgb, var(--help-highlight) 24%, var(--control-bg) 76%) !important;
       }
 
       .page {
@@ -1307,6 +1429,76 @@
                 aria-expanded="false"
               >◐</button>
               <div id="theme-menu" class="theme-menu" role="menu" hidden></div>
+              <button
+                id="top-help-trigger"
+                class="top-help-trigger"
+                type="button"
+                title="Toggle the controls help widget"
+                aria-label="Toggle the controls help widget"
+                aria-haspopup="dialog"
+                aria-expanded="false"
+              >?</button>
+              <div
+                id="top-help-menu"
+                class="top-help-menu"
+                role="dialog"
+                aria-label="Top controls legend"
+                hidden
+              >
+                <table class="top-help-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Key</th>
+                      <th scope="col">Control</th>
+                      <th scope="col">What it does</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr data-target-id="undo-btn">
+                      <td class="top-help-symbol">↶</td>
+                      <td>Undo</td>
+                      <td>Revert the last action.</td>
+                    </tr>
+                    <tr data-target-id="expand-all-btn">
+                      <td class="top-help-symbol">▾</td>
+                      <td>Expand all</td>
+                      <td>Open all visible branches.</td>
+                    </tr>
+                    <tr data-target-id="collapse-all-btn">
+                      <td class="top-help-symbol">▸</td>
+                      <td>Collapse all</td>
+                      <td>Close all visible branches.</td>
+                    </tr>
+                    <tr data-target-id="expand-level-btn">
+                      <td class="top-help-symbol">↧</td>
+                      <td>Expand next</td>
+                      <td>Open one deeper level at a time.</td>
+                    </tr>
+                    <tr data-target-id="favorite-item-btn">
+                      <td class="top-help-symbol">♡ / ♥</td>
+                      <td>Favorite filter</td>
+                      <td>Show only favorited items.</td>
+                    </tr>
+                    <tr data-target-id="message-stack-trigger">
+                      <td class="top-help-symbol">count</td>
+                      <td>Messages</td>
+                      <td>Open warning/error message stack.</td>
+                    </tr>
+                    <tr data-target-id="theme-menu-trigger">
+                      <td class="top-help-symbol">◐</td>
+                      <td>Theme</td>
+                      <td>
+                        <div id="top-help-theme-list" class="top-help-theme-list"></div>
+                      </td>
+                    </tr>
+                    <tr data-target-id="top-help-trigger">
+                      <td class="top-help-symbol">?</td>
+                      <td>Help</td>
+                      <td>Toggle the help widget.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
@@ -1391,6 +1583,9 @@
         const messageStackMenuEl = document.getElementById("message-stack-menu");
         const themeMenuTriggerEl = document.getElementById("theme-menu-trigger");
         const themeMenuEl = document.getElementById("theme-menu");
+        const topHelpTriggerEl = document.getElementById("top-help-trigger");
+        const topHelpMenuEl = document.getElementById("top-help-menu");
+        const topHelpThemeListEl = document.getElementById("top-help-theme-list");
         const searchInputEl = document.getElementById("outline-search");
         const debugToolbarEl = document.getElementById("debug-toolbar");
         const debugToolbarCloseBtnEl = document.getElementById("debug-toolbar-close-btn");
@@ -1451,6 +1646,8 @@
         let debugThemeCycleOriginalThemeID = "";
         let debugThemeCycleNextThemeIndex = 0;
         let debugStateOriginalText = "";
+        let topHelpPreviewRowEl = null;
+        let topHelpPreviewControlEl = null;
 
         const themes = [
           { id: "default", label: "default" },
@@ -1472,6 +1669,7 @@
           }
 
           rebuildThemeMenu(selectedTheme);
+          renderTopHelpThemeButtons(selectedTheme);
           renderMessageStack();
           renderDebugThemeCycleButton();
         }
@@ -1487,6 +1685,47 @@
           }
           themeMenuEl.hidden = true;
           themeMenuTriggerEl.setAttribute("aria-expanded", "false");
+        }
+
+        function closeTopHelpMenu() {
+          if (!(topHelpMenuEl instanceof HTMLElement) || !(topHelpTriggerEl instanceof HTMLButtonElement)) {
+            return;
+          }
+          topHelpMenuEl.hidden = true;
+          topHelpTriggerEl.setAttribute("aria-expanded", "false");
+          clearTopHelpPreview();
+        }
+
+        function clearTopHelpPreview() {
+          if (topHelpPreviewRowEl instanceof HTMLElement) {
+            topHelpPreviewRowEl.classList.remove("is-linked");
+          }
+          if (topHelpPreviewControlEl instanceof HTMLElement) {
+            topHelpPreviewControlEl.classList.remove("top-help-target-active");
+          }
+          topHelpPreviewRowEl = null;
+          topHelpPreviewControlEl = null;
+        }
+
+        function previewTopHelpTarget(rowEl) {
+          clearTopHelpPreview();
+          if (!(rowEl instanceof HTMLTableRowElement)) {
+            return;
+          }
+          const targetID = (rowEl.dataset.targetId || "").trim();
+          if (targetID === "") {
+            return;
+          }
+
+          const control = document.getElementById(targetID);
+          if (!(control instanceof HTMLElement)) {
+            return;
+          }
+
+          rowEl.classList.add("is-linked");
+          control.classList.add("top-help-target-active");
+          topHelpPreviewRowEl = rowEl;
+          topHelpPreviewControlEl = control;
         }
 
         function rebuildThemeMenu(selectedThemeID) {
@@ -1520,6 +1759,32 @@
           }
         }
 
+        function renderTopHelpThemeButtons(selectedThemeID) {
+          if (!(topHelpThemeListEl instanceof HTMLElement)) {
+            return;
+          }
+
+          topHelpThemeListEl.replaceChildren();
+          for (const theme of themes) {
+            const button = document.createElement("button");
+            button.type = "button";
+            button.className = "top-help-theme-btn";
+            const isSelected = theme.id === selectedThemeID;
+            if (isSelected) {
+              button.classList.add("is-selected");
+            }
+            button.textContent = theme.label;
+            button.title = `Switch to ${theme.label} theme`;
+            button.setAttribute("aria-label", `Switch to ${theme.label} theme`);
+            button.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              applyTheme(theme.id);
+            });
+            topHelpThemeListEl.appendChild(button);
+          }
+        }
+
         function initThemeControls() {
           if (!(themeMenuEl instanceof HTMLElement) || !(themeMenuTriggerEl instanceof HTMLButtonElement)) {
             return;
@@ -1546,6 +1811,65 @@
             storedTheme = "default";
           }
           applyTheme(storedTheme);
+        }
+
+        function initTopHelpControls() {
+          if (!(topHelpMenuEl instanceof HTMLElement) || !(topHelpTriggerEl instanceof HTMLButtonElement)) {
+            return;
+          }
+
+          const linkedRows = Array.from(topHelpMenuEl.querySelectorAll("tbody tr[data-target-id]"))
+            .filter((row) => row instanceof HTMLTableRowElement);
+
+          topHelpTriggerEl.addEventListener("click", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            const willOpen = topHelpMenuEl.hidden;
+            closeAllToolMenus();
+            closeThemeMenu();
+            closeMessageStackMenu();
+            closeDebugJSONPanel();
+            topHelpMenuEl.hidden = !willOpen;
+            topHelpTriggerEl.setAttribute("aria-expanded", willOpen ? "true" : "false");
+            if (!willOpen) {
+              clearTopHelpPreview();
+            }
+          });
+
+          topHelpMenuEl.addEventListener("click", (event) => {
+            event.stopPropagation();
+          });
+
+          topHelpMenuEl.addEventListener("mouseleave", () => {
+            clearTopHelpPreview();
+          });
+
+          for (const row of linkedRows) {
+            row.addEventListener("mouseenter", () => {
+              previewTopHelpTarget(row);
+            });
+            row.addEventListener("mouseleave", () => {
+              if (topHelpPreviewRowEl === row) {
+                clearTopHelpPreview();
+              }
+            });
+            row.addEventListener("click", (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              previewTopHelpTarget(row);
+              const targetID = (row.dataset.targetId || "").trim();
+              if (targetID === "") {
+                return;
+              }
+              if (targetID === "theme-menu-trigger") {
+                return;
+              }
+              const control = document.getElementById(targetID);
+              if (control instanceof HTMLElement) {
+                control.click();
+              }
+            });
+          }
         }
 
         function parseBooleanQueryValue(value) {
@@ -5017,6 +5341,9 @@
           closeAllToolMenus();
           closeThemeMenu();
           closeMessageStackMenu();
+          if (!clickTarget || !clickTarget.closest(".outline-toolbar")) {
+            closeTopHelpMenu();
+          }
           if (
             clickTarget &&
             (clickTarget.closest("#debug-json-panel") || clickTarget.closest("#debug-toolbar-state-btn"))
@@ -5084,6 +5411,7 @@
 
         initDebugToolbar();
         initThemeControls();
+        initTopHelpControls();
         initMessageStackControls();
         initDevAutoReload();
         initSearchControls();
